@@ -1,0 +1,16 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Deploy
+        run: |
+          cd /root/apps/kkb-hackathon-goldenhead
+          git pull origin main
+          echo "✅ Deploy tamamlandı!"
