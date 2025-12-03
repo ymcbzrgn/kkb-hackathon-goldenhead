@@ -8,6 +8,7 @@
 
 ## 📋 İçindekiler
 
+
 - [Neden Vector DB?](#-neden-vector-db)
 - [Mimari](#-mimari)
 - [Collection Yapıları](#-collection-yapıları)
