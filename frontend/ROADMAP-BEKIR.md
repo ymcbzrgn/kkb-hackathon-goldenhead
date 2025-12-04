@@ -14,7 +14,7 @@
 | 📝 **Faz 2** | Types & Mock System | ✅ Tamamlandı | ██████████ 100% |
 | 🔌 **Faz 3** | Infrastructure | ✅ Tamamlandı | ██████████ 100% |
 | 🏠 **Faz 4** | Landing Page | ✅ Tamamlandı | ██████████ 100% |
-| 📋 **Faz 5** | Reports Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
+| 📋 **Faz 5** | Reports Page | ✅ Tamamlandı | ██████████ 100% |
 | 📊 **Faz 6** | Report Detail | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🔴 **Faz 7** | Live Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🏛️ **Faz 8** | Council UI | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
@@ -122,27 +122,27 @@
 
 ---
 
-## 📋 FAZ 5: Reports Page
+## 📋 FAZ 5: Reports Page ✅
 
 **Tahmini Süre:** 3-4 saat  
-**Durum:** ⚪ Başlamadı
+**Durum:** ✅ Tamamlandı
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
-| 5.1 | `components/reports/StatusBadge.tsx` | ⬜ | pending/processing/completed/failed |
-| 5.2 | `components/reports/RiskBadge.tsx` | ⬜ | Risk level + renk |
-| 5.3 | `components/reports/ReportCard.tsx` | ⬜ | Tek rapor kartı |
-| 5.4 | `components/reports/ReportList.tsx` | ⬜ | Kart listesi |
-| 5.5 | `components/reports/ReportFilters.tsx` | ⬜ | Status, date filter |
-| 5.6 | `components/reports/Pagination.tsx` | ⬜ | Sayfa navigasyonu |
-| 5.7 | `pages/Reports.tsx` | ⬜ | Liste sayfası |
-| 5.8 | Empty state | ⬜ | Rapor yoksa |
-| 5.9 | Loading state | ⬜ | Yüklenirken |
-| 5.10 | Kart tıklama → /reports/:id | ⬜ | Navigation |
-| 5.11 | Responsive test | ⬜ | Grid düzeni |
-| 5.12 | Reports commit | ⬜ | "feat: reports page" |
+| 5.1 | `components/reports/StatusBadge.tsx` | ✅ Tamamlandı | pending/processing/completed/failed |
+| 5.2 | `components/reports/RiskBadge.tsx` | ✅ Tamamlandı | Risk level + renk |
+| 5.3 | `components/reports/ReportCard.tsx` | ✅ Tamamlandı | Tek rapor kartı, hover efektler |
+| 5.4 | `components/reports/ReportList.tsx` | ✅ Tamamlandı | Grid kart listesi |
+| 5.5 | `components/reports/ReportFilters.tsx` | ✅ Tamamlandı | Status filter + search |
+| 5.6 | `components/reports/Pagination.tsx` | ✅ Tamamlandı | Sayfa navigasyonu |
+| 5.7 | `pages/ReportsPage.tsx` | ✅ Tamamlandı | Liste sayfası |
+| 5.8 | `components/reports/EmptyState.tsx` | ✅ Tamamlandı | Rapor yoksa |
+| 5.9 | Loading state | ✅ Tamamlandı | Spinner ile yüklenirken |
+| 5.10 | Kart tıklama → /reports/:id | ✅ Tamamlandı | Navigation links |
+| 5.11 | Responsive test | ✅ Tamamlandı | Grid düzeni |
+| 5.12 | Reports commit | ⬜ Bekliyor | "feat: reports page" |
 
-**Çıktı:** Çalışan rapor listesi sayfası
+**Çıktı:** Çalışan rapor listesi sayfası ✅
 
 ---
 
