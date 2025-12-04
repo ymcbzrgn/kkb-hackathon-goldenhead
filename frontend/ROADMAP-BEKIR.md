@@ -2,7 +2,7 @@
 
 > **Takım:** GoldenHead  
 > **Geliştirici:** Bekir  
-> **Son Güncelleme:** 4 Aralık 2024
+> **Son Güncelleme:** 4 Aralık 2025
 
 ---
 
@@ -10,8 +10,8 @@
 
 | Faz | Açıklama | Durum | İlerleme |
 |-----|----------|-------|----------|
-| 🔧 **Faz 1** | Proje Kurulumu | 🟡 Devam Ediyor | ████░░░░░░ 40% |
-| 📝 **Faz 2** | Types & Mock System | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
+| 🔧 **Faz 1** | Proje Kurulumu | ✅ Tamamlandı | ██████████ 100% |
+| 📝 **Faz 2** | Types & Mock System | 🟡 Devam Ediyor | ░░░░░░░░░░ 0% |
 | 🔌 **Faz 3** | Infrastructure | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🏠 **Faz 4** | Landing Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 📋 **Faz 5** | Reports Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
@@ -22,10 +22,11 @@
 
 ---
 
-## 🔧 FAZ 1: Proje Kurulumu
+## 🔧 FAZ 1: Proje Kurulumu ✅
 
 **Tahmini Süre:** 1-2 saat  
-**Durum:** 🟡 Devam Ediyor
+**Durum:** ✅ Tamamlandı  
+**Commit:** `3180be7`
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
@@ -38,10 +39,12 @@
 | 1.7 | Lucide React kurulumu | ✅ Tamamlandı | İkonlar |
 | 1.8 | KKB renk paleti (tailwind.config.js) | ✅ Tamamlandı | kkb-*, accent-*, risk-* |
 | 1.9 | .env dosyaları | ✅ Tamamlandı | VITE_USE_MOCK=true |
-| 1.10 | Klasör yapısı oluştur | ⬜ Bekliyor | components, pages, hooks... |
-| 1.11 | shadcn/ui kurulumu | ⬜ Bekliyor | UI component library |
-| 1.12 | ESLint + Prettier config | ⬜ Bekliyor | Code quality |
-| 1.13 | İlk commit | ⬜ Bekliyor | "feat: project setup" |
+| 1.10 | Klasör yapısı oluştur | ✅ Tamamlandı | 14 klasör oluşturuldu |
+| 1.11 | UI Components (shadcn pattern) | ✅ Tamamlandı | Button, Card, Badge, Input, Modal, Loading, Progress |
+| 1.12 | Layout Components | ✅ Tamamlandı | Header, Footer, MainLayout |
+| 1.13 | Utils | ✅ Tamamlandı | cn, constants, formatters, animations |
+| 1.14 | ESLint config | ✅ Tamamlandı | TypeScript + React rules |
+| 1.15 | İlk commit | ✅ Tamamlandı | "feat: project setup" |
 
 **Test:** `npm run dev` → localhost:3000'de sayfa açılıyor ✅
 
@@ -50,21 +53,21 @@
 ## 📝 FAZ 2: Types & Mock System
 
 **Tahmini Süre:** 2-3 saat  
-**Durum:** ⚪ Başlamadı
+**Durum:** 🟡 Devam Ediyor
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
-| 2.1 | `types/api.ts` - Base types | ⬜ | ApiResponse, ApiError, Pagination |
-| 2.2 | `types/report.ts` - Report types | ⬜ | ReportStatus, RiskLevel, Decision |
-| 2.3 | `types/agent.ts` - Agent types | ⬜ | TsgData, IhaleData, NewsData |
-| 2.4 | `types/council.ts` - Council types | ⬜ | CouncilDecision, TranscriptEntry |
-| 2.5 | `types/websocket.ts` - WS events | ⬜ | Tüm event tipleri |
-| 2.6 | `utils/constants.ts` - Sabitler | ⬜ | Labels, colors, members |
-| 2.7 | `mocks/mockData.ts` - Örnek veriler | ⬜ | 2-3 örnek rapor |
-| 2.8 | `mocks/mockApi.ts` - Mock REST | ⬜ | Fake API responses |
-| 2.9 | `mocks/mockWebSocket.ts` - Mock WS | ⬜ | Event simulation |
-| 2.10 | `mocks/mockScenarios.ts` - Senaryolar | ⬜ | HAPPY_PATH, AGENT_FAIL... |
-| 2.11 | Type test | ⬜ | TypeScript hata kontrolü |
+| 2.1 | `types/api.ts` - Base types | ✅ Tamamlandı | ApiResponse, ApiError, Pagination, Enums |
+| 2.2 | `types/report.ts` - Report types | ✅ Tamamlandı | ReportListItem, ReportDetail, ReportState |
+| 2.3 | `types/agent.ts` - Agent types | ✅ Tamamlandı | TsgData, IhaleData, NewsData, AgentProgress |
+| 2.4 | `types/council.ts` - Council types | ✅ Tamamlandı | CouncilDecision, TranscriptEntry, CouncilState |
+| 2.5 | `types/websocket.ts` - WS events | ✅ Tamamlandı | Tüm event tipleri + type guards |
+| 2.6 | `types/index.ts` - Types export | ✅ Tamamlandı | Tek noktadan export |
+| 2.7 | `mocks/mockData.ts` - Örnek veriler | ✅ Tamamlandı | 5 örnek rapor, council transcript |
+| 2.8 | `mocks/mockApi.ts` - Mock REST | ✅ Tamamlandı | CRUD + pagination + validation |
+| 2.9 | `mocks/mockWebSocket.ts` - Mock WS | ✅ Tamamlandı | Gerçekçi event simulation |
+| 2.10 | Type test | ⬜ Bekliyor | TypeScript hata kontrolü |
+| 2.11 | Faz 2 commit | ⬜ Bekliyor | "feat: types & mock system" |
 
 **Çıktı:** Tüm tipler tanımlı, mock sistem hazır
 
