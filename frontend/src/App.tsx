@@ -1,15 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import { MainLayout } from '@/components/layout'
-import { LandingPage, ReportsPage } from '@/pages'
-
-function ReportDetailPage() {
-  return (
-    <div className="container px-4 py-12 mx-auto">
-      <h1 className="text-2xl font-bold text-kkb-900 mb-4">Rapor Detayı</h1>
-      <p className="text-gray-600">Rapor detay sayfası - Faz 6'da gelecek</p>
-    </div>
-  )
-}
+import { LandingPage, ReportsPage, ReportDetailPage } from '@/pages'
 
 function LiveReportPage() {
   return (

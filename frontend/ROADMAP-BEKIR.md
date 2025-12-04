@@ -15,7 +15,7 @@
 | 🔌 **Faz 3** | Infrastructure | ✅ Tamamlandı | ██████████ 100% |
 | 🏠 **Faz 4** | Landing Page | ✅ Tamamlandı | ██████████ 100% |
 | 📋 **Faz 5** | Reports Page | ✅ Tamamlandı | ██████████ 100% |
-| 📊 **Faz 6** | Report Detail | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
+| 📊 **Faz 6** | Report Detail | ✅ Tamamlandı | ██████████ 100% |
 | 🔴 **Faz 7** | Live Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🏛️ **Faz 8** | Council UI | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🎨 **Faz 9** | Polish & Test | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
@@ -149,26 +149,26 @@
 ## 📊 FAZ 6: Report Detail Page
 
 **Tahmini Süre:** 4-5 saat  
-**Durum:** ⚪ Başlamadı
+**Durum:** ✅ Tamamlandı
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
-| 6.1 | `components/report-detail/RiskGauge.tsx` | ⬜ | Circular gauge |
-| 6.2 | `components/report-detail/ConsensusBar.tsx` | ⬜ | Konsensüs % bar |
-| 6.3 | `components/report-detail/ConditionsList.tsx` | ⬜ | Şartlar listesi |
-| 6.4 | `components/report-detail/FinalDecision.tsx` | ⬜ | Ana karar kartı |
-| 6.5 | `components/report-detail/TsgResults.tsx` | ⬜ | TSG agent sonuçları |
-| 6.6 | `components/report-detail/IhaleResults.tsx` | ⬜ | İhale agent sonuçları |
-| 6.7 | `components/report-detail/NewsResults.tsx` | ⬜ | Haber agent sonuçları |
-| 6.8 | `components/report-detail/AgentResults.tsx` | ⬜ | 3 agent container |
-| 6.9 | `components/report-detail/TranscriptAccordion.tsx` | ⬜ | Komite transcript |
-| 6.10 | `pages/ReportDetail.tsx` | ⬜ | Detay sayfası |
-| 6.11 | PDF indirme butonu | ⬜ | GET /reports/:id/pdf |
-| 6.12 | Silme butonu + modal | ⬜ | DELETE confirm |
-| 6.13 | Processing → Live redirect | ⬜ | Auto redirect |
-| 6.14 | Report detail commit | ⬜ | "feat: report detail" |
+| 6.1 | `components/report-detail/RiskGauge.tsx` | ✅ Tamamlandı | Circular gauge, animasyonlu |
+| 6.2 | `components/report-detail/ConsensusBar.tsx` | ✅ Tamamlandı | Konsensüs % bar |
+| 6.3 | `components/report-detail/ConditionsList.tsx` | ✅ Tamamlandı | Şartlar + muhalefet şerhi |
+| 6.4 | `components/report-detail/FinalDecision.tsx` | ✅ Tamamlandı | Ana karar kartı |
+| 6.5 | `components/report-detail/TsgResults.tsx` | ✅ Tamamlandı | TSG agent sonuçları |
+| 6.6 | `components/report-detail/IhaleResults.tsx` | ✅ Tamamlandı | İhale agent sonuçları |
+| 6.7 | `components/report-detail/NewsResults.tsx` | ✅ Tamamlandı | Haber agent sonuçları |
+| 6.8 | `components/report-detail/AgentResults.tsx` | ✅ Tamamlandı | Tab yapısında 3 agent |
+| 6.9 | `components/report-detail/TranscriptAccordion.tsx` | ✅ Tamamlandı | Komite transcript accordion |
+| 6.10 | `pages/ReportDetailPage.tsx` | ✅ Tamamlandı | Detay sayfası |
+| 6.11 | PDF indirme butonu | ✅ Tamamlandı | Placeholder (backend gerek) |
+| 6.12 | Silme butonu + modal | ✅ Tamamlandı | confirm() ile |
+| 6.13 | Processing → Live redirect | ✅ Tamamlandı | Link to /live |
+| 6.14 | Report detail commit | ⬜ Bekliyor | "feat: report detail" |
 
-**Çıktı:** Tam çalışan rapor detay sayfası
+**Çıktı:** Tam çalışan rapor detay sayfası ✅
 
 ---
 
