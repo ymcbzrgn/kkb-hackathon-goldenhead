@@ -5,18 +5,19 @@
 
 import { StreamingText } from './StreamingText';
 import { cn } from '@/utils/cn';
+import type { CouncilMemberId } from '@/types';
 
 interface SpeechBubbleProps {
+  speakerId: CouncilMemberId;
   speakerName: string;
-  speakerEmoji: string;
   text: string;
   isStreaming?: boolean;
   score?: number;
 }
 
 export function SpeechBubble({ 
+  speakerId,
   speakerName, 
-  speakerEmoji, 
   text, 
   isStreaming = false,
   score,
@@ -29,10 +30,14 @@ export function SpeechBubble({
       {/* Avatar */}
       <div className="flex-shrink-0">
         <div className={cn(
-          'w-12 h-12 rounded-full flex items-center justify-center text-2xl',
-          isStreaming ? 'bg-kkb-100 ring-2 ring-kkb-400' : 'bg-gray-100'
+          'w-12 h-12 rounded-full overflow-hidden',
+          isStreaming ? 'ring-2 ring-kkb-400' : 'ring-1 ring-gray-200'
         )}>
-          {speakerEmoji}
+          <img 
+            src={`/council/${speakerId}.png`} 
+            alt={speakerName}
+            className="w-full h-full object-cover"
+          />
         </div>
       </div>
 

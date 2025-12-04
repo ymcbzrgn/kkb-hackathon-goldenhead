@@ -16,14 +16,13 @@ const councilMembers: Array<{
   id: CouncilMemberId;
   name: string;
   role: string;
-  emoji: string;
 }> = [
-  { id: 'moderator', name: 'Komite Başkanı', role: 'Genel Müdür Yardımcısı', emoji: '👨‍⚖️' },
-  { id: 'risk_analyst', name: 'Mehmet Bey', role: 'Baş Risk Analisti', emoji: '🔴' },
-  { id: 'business_analyst', name: 'Ayşe Hanım', role: 'İş Geliştirme Müdürü', emoji: '🟢' },
-  { id: 'legal_expert', name: 'Av. Zeynep Hanım', role: 'Hukuk Müşaviri', emoji: '⚖️' },
-  { id: 'media_analyst', name: 'Deniz Bey', role: 'İtibar Analisti', emoji: '📰' },
-  { id: 'sector_expert', name: 'Prof. Dr. Ali Bey', role: 'Sektör Uzmanı', emoji: '📊' },
+  { id: 'moderator', name: 'Komite Başkanı', role: 'Genel Müdür Yardımcısı' },
+  { id: 'risk_analyst', name: 'Mehmet Bey', role: 'Baş Risk Analisti' },
+  { id: 'business_analyst', name: 'Ayşe Hanım', role: 'İş Geliştirme Müdürü' },
+  { id: 'legal_expert', name: 'Av. Zeynep Hanım', role: 'Hukuk Müşaviri' },
+  { id: 'media_analyst', name: 'Deniz Bey', role: 'İtibar Analisti' },
+  { id: 'sector_expert', name: 'Prof. Dr. Ali Bey', role: 'Sektör Uzmanı' },
 ];
 
 export function CouncilContainer() {
@@ -76,7 +75,7 @@ export function CouncilContainer() {
         {councilMembers.map((member) => (
           <SpeakerAvatar
             key={member.id}
-            emoji={member.emoji}
+            id={member.id}
             name={member.name}
             role={member.role}
             isActive={currentSpeaker?.id === member.id}
@@ -97,7 +96,7 @@ export function CouncilContainer() {
             {transcript.map((entry, idx) => (
               <SpeechBubble
                 key={`${entry.speaker_id}-${idx}`}
-                speakerEmoji={entry.speaker_emoji}
+                speakerId={entry.speaker_id}
                 speakerName={entry.speaker_name}
                 text={entry.content}
                 isStreaming={false}
@@ -108,7 +107,7 @@ export function CouncilContainer() {
             {/* Current streaming speech */}
             {isTyping && currentSpeaker && (
               <SpeechBubble
-                speakerEmoji={currentSpeaker.emoji}
+                speakerId={currentSpeaker.id}
                 speakerName={currentSpeaker.name}
                 text={currentSpeech}
                 isStreaming={true}

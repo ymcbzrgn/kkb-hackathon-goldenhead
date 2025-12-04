@@ -1,43 +1,48 @@
 /**
  * SpeakerAvatar Component
- * Konuşmacı avatarı - emoji, isim, rol
+ * Konuşmacı avatarı - resim, isim, rol
  */
 
 import { cn } from '@/utils/cn';
+import type { CouncilMemberId } from '@/types';
 
 interface SpeakerAvatarProps {
+  id: CouncilMemberId;
   name: string;
   role: string;
-  emoji: string;
   isActive?: boolean;
   size?: 'sm' | 'md' | 'lg';
 }
 
 export function SpeakerAvatar({ 
+  id,
   name, 
   role, 
-  emoji, 
   isActive = false,
   size = 'md' 
 }: SpeakerAvatarProps) {
   const sizeClasses = {
-    sm: 'w-10 h-10 text-xl',
-    md: 'w-14 h-14 text-2xl',
-    lg: 'w-20 h-20 text-4xl',
+    sm: 'w-12 h-12',
+    md: 'w-16 h-16',
+    lg: 'w-24 h-24',
   };
 
   return (
     <div className="flex flex-col items-center gap-2">
       <div 
         className={cn(
-          'rounded-full flex items-center justify-center transition-all duration-300',
+          'rounded-full overflow-hidden transition-all duration-300',
           sizeClasses[size],
           isActive 
-            ? 'bg-kkb-100 ring-4 ring-kkb-500 ring-offset-2 scale-110' 
-            : 'bg-gray-100'
+            ? 'ring-4 ring-kkb-500 ring-offset-2 scale-110' 
+            : 'ring-2 ring-gray-200'
         )}
       >
-        <span>{emoji}</span>
+        <img 
+          src={`/council/${id}.png`} 
+          alt={name}
+          className="w-full h-full object-cover"
+        />
       </div>
       <div className="text-center">
         <p className={cn(
