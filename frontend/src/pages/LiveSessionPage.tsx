@@ -10,6 +10,7 @@ import { useReport } from '@/hooks/useReport';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useAgentStore } from '@/stores/agentStore';
 import { useReportStore } from '@/stores/reportStore';
+import { CouncilContainer } from '@/components/council';
 
 export function LiveSessionPage() {
   const { id } = useParams<{ id: string }>();
@@ -243,13 +244,7 @@ export function LiveSessionPage() {
 
         {/* Council Phase Placeholder */}
         {phase === 'council' && (
-          <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
-            <div className="w-16 h-16 bg-kkb-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Loader2 className="w-8 h-8 text-kkb-600 animate-spin" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">Komite Toplantısı</h3>
-            <p className="text-gray-500">6 kişilik sanal kredi komitesi değerlendirme yapıyor...</p>
-          </div>
+          <CouncilContainer />
         )}
 
         {/* Completed */}
