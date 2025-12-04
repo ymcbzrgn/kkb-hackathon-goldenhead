@@ -7,12 +7,22 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, MessageSquare, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import type { TranscriptEntry, CouncilPhase } from '@/types';
+import type { TranscriptEntry, CouncilPhase, CouncilMemberId } from '@/types';
 import { formatShortDate } from '@/utils/formatters';
 
 interface TranscriptAccordionProps {
   transcript: TranscriptEntry[];
 }
+
+// Council üye fotoğrafları - CouncilIntro ile aynı mapping
+const councilPhotos: Record<CouncilMemberId, string> = {
+  risk_analyst: '/council/risk_analyst.png',
+  business_analyst: '/council/business_analyst.png',
+  legal_expert: '/council/legal_expert.png',
+  media_analyst: '/council/media_analyst.png',
+  sector_expert: '/council/sector_expert.png',
+  moderator: '/council/moderator.png',
+};
 
 const phaseLabels: Record<CouncilPhase, string> = {
   opening: 'Açılış',
@@ -44,16 +54,31 @@ function groupByPhase(transcript: TranscriptEntry[]) {
   return groups;
 }
 
-function TranscriptEntry({ entry }: { entry: TranscriptEntry }) {
+function TranscriptEntryItem({ entry }: { entry: TranscriptEntry }) {
+  const photoUrl = councilPhotos[entry.speaker_id as CouncilMemberId];
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex gap-4 py-4 border-b last:border-0"
     >
-      {/* Avatar */}
+      {/* Avatar with Photo */}
       <div className="flex-shrink-0">
-        <div className="w-10 h-10 rounded-full bg-kkb-100 flex items-center justify-center text-xl">
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt={entry.speaker_name}
+            className="w-10 h-10 rounded-full object-cover border-2 border-kkb-200 shadow-sm"
+            onError={(e) => {
+              // Fallback to emoji if image fails
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+              target.nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+        ) : null}
+        <div className={`w-10 h-10 rounded-full bg-kkb-100 flex items-center justify-center text-xl ${photoUrl ? 'hidden' : ''}`}>
           {entry.speaker_emoji}
         </div>
       </div>
@@ -125,7 +150,7 @@ function PhaseSection({
           >
             <div className="px-4 bg-white">
               {entries.map((entry, index) => (
-                <TranscriptEntry key={index} entry={entry} />
+                <TranscriptEntryItem key={index} entry={entry} />
               ))}
             </div>
           </motion.div>
