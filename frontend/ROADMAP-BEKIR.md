@@ -11,7 +11,7 @@
 | Faz | Açıklama | Durum | İlerleme |
 |-----|----------|-------|----------|
 | 🔧 **Faz 1** | Proje Kurulumu | ✅ Tamamlandı | ██████████ 100% |
-| 📝 **Faz 2** | Types & Mock System | 🟡 Devam Ediyor | ░░░░░░░░░░ 0% |
+| 📝 **Faz 2** | Types & Mock System | ✅ Tamamlandı | ██████████ 100% |
 | 🔌 **Faz 3** | Infrastructure | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🏠 **Faz 4** | Landing Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 📋 **Faz 5** | Reports Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
@@ -50,10 +50,11 @@
 
 ---
 
-## 📝 FAZ 2: Types & Mock System
+## 📝 FAZ 2: Types & Mock System ✅
 
 **Tahmini Süre:** 2-3 saat  
-**Durum:** 🟡 Devam Ediyor
+**Durum:** ✅ Tamamlandı  
+**Commit:** `27987ff`
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
@@ -66,17 +67,17 @@
 | 2.7 | `mocks/mockData.ts` - Örnek veriler | ✅ Tamamlandı | 5 örnek rapor, council transcript |
 | 2.8 | `mocks/mockApi.ts` - Mock REST | ✅ Tamamlandı | CRUD + pagination + validation |
 | 2.9 | `mocks/mockWebSocket.ts` - Mock WS | ✅ Tamamlandı | Gerçekçi event simulation |
-| 2.10 | Type test | ⬜ Bekliyor | TypeScript hata kontrolü |
-| 2.11 | Faz 2 commit | ⬜ Bekliyor | "feat: types & mock system" |
+| 2.10 | Type test | ✅ Tamamlandı | `npx tsc --noEmit` hatasız |
+| 2.11 | Faz 2 commit | ✅ Tamamlandı | "feat: types & mock system" |
 
-**Çıktı:** Tüm tipler tanımlı, mock sistem hazır
+**Test:** `npx tsc --noEmit` → Hata yok ✅
 
 ---
 
 ## 🔌 FAZ 3: Infrastructure (Hooks & Services)
 
 **Tahmini Süre:** 3-4 saat  
-**Durum:** ⚪ Başlamadı
+**Durum:** 🟡 Devam Ediyor
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
@@ -89,10 +90,9 @@
 | 3.7 | `stores/uiStore.ts` | ⬜ | UI state (modals...) |
 | 3.8 | `hooks/useReport.ts` | ⬜ | React Query hook |
 | 3.9 | `hooks/useReports.ts` | ⬜ | List + pagination |
-| 3.10 | `utils/formatters.ts` | ⬜ | Date, money, duration |
-| 3.11 | `utils/animations.ts` | ⬜ | Framer Motion presets |
-| 3.12 | `utils/cn.ts` | ⬜ | className utility |
-| 3.13 | Infrastructure test | ⬜ | Mock WS bağlantı testi |
+| 3.10 | Infrastructure test | ⬜ | Mock API + hooks testi |
+
+**Not:** utils/formatters.ts, utils/animations.ts, utils/cn.ts Faz 1'de oluşturuldu.
 
 **Çıktı:** Tüm servisler ve hook'lar çalışıyor
 
@@ -103,15 +103,14 @@
 **Tahmini Süre:** 3-4 saat  
 **Durum:** ⚪ Başlamadı
 
+**Not:** Header.tsx, Footer.tsx Faz 1'de oluşturuldu.
+
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
-| 4.1 | `components/layout/Header.tsx` | ⬜ | Logo, nav links |
-| 4.2 | `components/layout/Footer.tsx` | ⬜ | GoldenHead, KKB copyright |
-| 4.3 | `components/layout/PageContainer.tsx` | ⬜ | Sayfa wrapper |
-| 4.4 | `components/landing/Hero.tsx` | ⬜ | Gradient bg, başlık |
-| 4.5 | `components/landing/SearchForm.tsx` | ⬜ | Firma adı input |
-| 4.6 | `components/landing/AgentCards.tsx` | ⬜ | 3 agent tanıtımı |
-| 4.7 | `components/landing/CouncilIntro.tsx` | ⬜ | 6 üye tanıtımı |
+| 4.1 | `components/landing/Hero.tsx` | ⬜ | Gradient bg, başlık |
+| 4.2 | `components/landing/SearchForm.tsx` | ⬜ | Firma adı input |
+| 4.3 | `components/landing/AgentCards.tsx` | ⬜ | 3 agent tanıtımı |
+| 4.4 | `components/landing/CouncilIntro.tsx` | ⬜ | 6 üye tanıtımı |
 | 4.8 | `pages/Landing.tsx` | ⬜ | Tüm bileşenler birleşik |
 | 4.9 | Form submit → POST /api/reports | ⬜ | API call + redirect |
 | 4.10 | Responsive test | ⬜ | Mobile, tablet, desktop |
