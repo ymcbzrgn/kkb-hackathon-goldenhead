@@ -6,3 +6,5 @@ export { Input } from './input';
 export { Modal } from './modal';
 export { Spinner, LoadingOverlay, Skeleton, SkeletonCard, SkeletonTable } from './loading';
 export { Progress, ScoreBar } from './progress';
+export { ToastContainer } from './toast';
+export { ErrorBoundary } from './error-boundary';
