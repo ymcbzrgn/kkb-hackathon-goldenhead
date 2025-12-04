@@ -15,13 +15,15 @@ interface UseWebSocketOptions {
   companyName: string;
   onComplete?: () => void;
   onError?: (error: string) => void;
+  enabled?: boolean;
 }
 
 export function useWebSocket({ 
   reportId, 
   companyName, 
   onComplete, 
-  onError 
+  onError,
+  enabled = true,
 }: UseWebSocketOptions) {
   const connectionRef = useRef<WebSocketConnection | null>(null);
 
@@ -216,11 +218,13 @@ export function useWebSocket({
     }
   }, []);
 
-  // Auto-connect on mount
+  // Auto-connect on mount when enabled
   useEffect(() => {
-    connect();
+    if (enabled && companyName) {
+      connect();
+    }
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [connect, disconnect, enabled, companyName]);
 
   return {
     connect,
