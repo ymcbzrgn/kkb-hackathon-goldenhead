@@ -12,8 +12,8 @@
 |-----|----------|-------|----------|
 | 🔧 **Faz 1** | Proje Kurulumu | ✅ Tamamlandı | ██████████ 100% |
 | 📝 **Faz 2** | Types & Mock System | ✅ Tamamlandı | ██████████ 100% |
-| 🔌 **Faz 3** | Infrastructure | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
-| 🏠 **Faz 4** | Landing Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
+| 🔌 **Faz 3** | Infrastructure | ✅ Tamamlandı | ██████████ 100% |
+| 🏠 **Faz 4** | Landing Page | ✅ Tamamlandı | ██████████ 100% |
 | 📋 **Faz 5** | Reports Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 📊 **Faz 6** | Report Detail | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
 | 🔴 **Faz 7** | Live Page | ⚪ Başlamadı | ░░░░░░░░░░ 0% |
@@ -74,50 +74,51 @@
 
 ---
 
-## 🔌 FAZ 3: Infrastructure (Hooks & Services)
+## 🔌 FAZ 3: Infrastructure (Hooks & Services) ✅
 
 **Tahmini Süre:** 3-4 saat  
-**Durum:** 🟡 Devam Ediyor
+**Durum:** ✅ Tamamlandı  
+**Commit:** `eada2c3`
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
-| 3.1 | `services/api.ts` - API client | ⬜ | fetch wrapper, mock switch |
-| 3.2 | `services/websocket.ts` - WS client | ⬜ | Bağlantı yönetimi |
-| 3.3 | `hooks/useWebSocket.ts` | ⬜ | Event handling hook |
-| 3.4 | `stores/reportStore.ts` | ⬜ | Zustand report state |
-| 3.5 | `stores/agentStore.ts` | ⬜ | Agent progress state |
-| 3.6 | `stores/councilStore.ts` | ⬜ | Council state, chunks |
-| 3.7 | `stores/uiStore.ts` | ⬜ | UI state (modals...) |
-| 3.8 | `hooks/useReport.ts` | ⬜ | React Query hook |
-| 3.9 | `hooks/useReports.ts` | ⬜ | List + pagination |
-| 3.10 | Infrastructure test | ⬜ | Mock API + hooks testi |
+| 3.1 | `services/api.ts` - API client | ✅ Tamamlandı | fetch wrapper, mock switch |
+| 3.2 | `services/websocket.ts` - WS client | ✅ Tamamlandı | Bağlantı yönetimi |
+| 3.3 | `hooks/useWebSocket.ts` | ✅ Tamamlandı | Event handling hook |
+| 3.4 | `stores/reportStore.ts` | ✅ Tamamlandı | Zustand report state |
+| 3.5 | `stores/agentStore.ts` | ✅ Tamamlandı | Agent progress state |
+| 3.6 | `stores/councilStore.ts` | ✅ Tamamlandı | Council state, chunks |
+| 3.7 | `stores/uiStore.ts` | ✅ Tamamlandı | UI state (modals, toasts) |
+| 3.8 | `hooks/useReport.ts` | ✅ Tamamlandı | React Query hook |
+| 3.9 | `hooks/useReports.ts` | ✅ Tamamlandı | List + pagination |
+| 3.10 | `hooks/useCreateReport.ts` | ✅ Tamamlandı | POST /api/reports |
+| 3.11 | `hooks/useDeleteReport.ts` | ✅ Tamamlandı | DELETE /api/reports/:id |
+| 3.12 | Infrastructure test | ✅ Tamamlandı | Mock API + hooks testi |
 
-**Not:** utils/formatters.ts, utils/animations.ts, utils/cn.ts Faz 1'de oluşturuldu.
-
-**Çıktı:** Tüm servisler ve hook'lar çalışıyor
+**Test:** `npx tsc --noEmit` → Hata yok ✅
 
 ---
 
-## 🏠 FAZ 4: Landing Page
+## 🏠 FAZ 4: Landing Page ✅
 
 **Tahmini Süre:** 3-4 saat  
-**Durum:** ⚪ Başlamadı
-
-**Not:** Header.tsx, Footer.tsx Faz 1'de oluşturuldu.
+**Durum:** ✅ Tamamlandı
 
 | # | Görev | Durum | Notlar |
 |---|-------|-------|--------|
-| 4.1 | `components/landing/Hero.tsx` | ⬜ | Gradient bg, başlık |
-| 4.2 | `components/landing/SearchForm.tsx` | ⬜ | Firma adı input |
-| 4.3 | `components/landing/AgentCards.tsx` | ⬜ | 3 agent tanıtımı |
-| 4.4 | `components/landing/CouncilIntro.tsx` | ⬜ | 6 üye tanıtımı |
-| 4.8 | `pages/Landing.tsx` | ⬜ | Tüm bileşenler birleşik |
-| 4.9 | Form submit → POST /api/reports | ⬜ | API call + redirect |
-| 4.10 | Responsive test | ⬜ | Mobile, tablet, desktop |
-| 4.11 | Animasyonlar | ⬜ | fadeInUp, stagger |
-| 4.12 | Landing commit | ⬜ | "feat: landing page" |
+| 4.1 | `components/landing/Hero.tsx` | ✅ Tamamlandı | Gradient bg, KKB logo, animasyonlar |
+| 4.2 | `components/landing/SearchForm.tsx` | ✅ Tamamlandı | Firma adı + tarih aralığı input |
+| 4.3 | `components/landing/AgentCards.tsx` | ✅ Tamamlandı | 3 agent tanıtımı (TSG, İhale, News) |
+| 4.4 | `components/landing/CouncilIntro.tsx` | ✅ Tamamlandı | 6 üye fotoğrafları + hover efektler |
+| 4.5 | `pages/LandingPage.tsx` | ✅ Tamamlandı | Tüm bileşenler birleşik |
+| 4.6 | KKB logoları | ✅ Tamamlandı | Header, Footer, Hero |
+| 4.7 | Council fotoğrafları | ✅ Tamamlandı | 6 karakter görseli |
+| 4.8 | Form submit → POST /api/reports | ✅ Tamamlandı | useCreateReport hook |
+| 4.9 | Responsive test | ✅ Tamamlandı | Mobile, tablet, desktop |
+| 4.10 | Animasyonlar | ✅ Tamamlandı | fadeInUp, stagger, hover |
+| 4.11 | CTA Section | ✅ Tamamlandı | Alt kısım gradient |
 
-**Çıktı:** Profesyonel vitrin sayfası
+**Çıktı:** Profesyonel vitrin sayfası ✅
 
 ---
 

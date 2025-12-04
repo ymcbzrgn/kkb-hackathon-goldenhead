@@ -9,12 +9,13 @@ export function Footer() {
         <div className="flex flex-col items-center justify-between gap-4 md:flex-row">
           {/* Left - KKB Branding */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-kkb-800 to-kkb-900">
-              <span className="text-sm font-bold text-white">K</span>
-            </div>
+            <img 
+              src="/kkb-logo.png" 
+              alt="KKB Logo" 
+              className="h-8 w-auto"
+            />
             <div className="text-sm text-gray-600">
-              <span className="font-semibold text-kkb-900">KKB</span>
-              {' '}Kredi Kayıt Bürosu
+              Kredi Kayıt Bürosu
             </div>
           </div>
 

@@ -16,20 +16,22 @@ export function Header() {
       <div className="container flex items-center justify-between h-16 px-4 mx-auto">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3 group">
-          {/* KKB Logo - SVG */}
           <motion.div
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-kkb-800 to-kkb-900 shadow-lg shadow-kkb-900/20"
           >
-            <span className="text-lg font-bold text-white">K</span>
+            <img 
+              src="/kkb-logo.png" 
+              alt="KKB Logo" 
+              className="h-10 w-auto"
+            />
           </motion.div>
           <div className="flex flex-col">
             <span className="text-lg font-bold text-kkb-900 tracking-tight">
-              KKB
+              Firma İstihbarat
             </span>
             <span className="text-[10px] font-medium text-gray-500 -mt-1">
-              Firma İstihbarat
+              AI Destekli Analiz
             </span>
           </div>
         </Link>
