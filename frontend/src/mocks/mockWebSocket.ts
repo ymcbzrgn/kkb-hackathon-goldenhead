@@ -256,7 +256,7 @@ export class MockWebSocket {
       await this.wait(500);
       this.emit(this.jobCompleted());
 
-    } catch (err) {
+    } catch {
       if (this.isRunning) {
         this.options.onError?.('Simulation error');
       }
