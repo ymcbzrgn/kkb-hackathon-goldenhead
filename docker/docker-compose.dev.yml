@@ -1,0 +1,82 @@
+# Docker Compose - Development
+# KKB Firma İstihbarat Sistemi
+
+version: '3.8'
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: kkb-postgres-dev
+    environment:
+      POSTGRES_USER: kkb
+      POSTGRES_PASSWORD: hackathon2024
+      POSTGRES_DB: firma_istihbarat
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+      - ../backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../backend/sql/indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql:ro
+      - ../backend/sql/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kkb -d firma_istihbarat"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis (Cache & Celery Broker)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: kkb-redis-dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata-dev:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Qdrant Vector Database
+  # ============================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: kkb-qdrant-dev
+    volumes:
+      - qdrantdata-dev:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+  # ============================================
+  # pgAdmin (Optional - Database Management)
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: kkb-pgadmin-dev
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@kkb.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  pgdata-dev:
+    driver: local
+  redisdata-dev:
+    driver: local
+  qdrantdata-dev:
+    driver: local

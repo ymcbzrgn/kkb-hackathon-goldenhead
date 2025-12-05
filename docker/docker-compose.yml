@@ -1,0 +1,176 @@
+# Docker Compose - Production
+# KKB Firma İstihbarat Sistemi
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Backend API
+  # ============================================
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: kkb-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://kkb:hackathon2024@postgres:5432/firma_istihbarat
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - KKB_API_URL=${KKB_API_URL}
+      - KKB_API_KEY=${KKB_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    networks:
+      - kkb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Frontend
+  # ============================================
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: kkb-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - kkb-network
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: kkb-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kkb
+      POSTGRES_PASSWORD: hackathon2024
+      POSTGRES_DB: firma_istihbarat
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../backend/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../backend/sql/indexes.sql:/docker-entrypoint-initdb.d/02-indexes.sql:ro
+      - ../backend/sql/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - kkb-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kkb -d firma_istihbarat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis (Cache & Celery Broker)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: kkb-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - kkb-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Qdrant Vector Database
+  # ============================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: kkb-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrantdata:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    networks:
+      - kkb-network
+
+  # ============================================
+  # Celery Worker
+  # ============================================
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: kkb-celery-worker
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app worker -l info -c 4
+    environment:
+      - DATABASE_URL=postgresql://kkb:hackathon2024@postgres:5432/firma_istihbarat
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - KKB_API_URL=${KKB_API_URL}
+      - KKB_API_KEY=${KKB_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - kkb-network
+
+  # ============================================
+  # Celery Beat (Scheduler) - Optional
+  # ============================================
+  celery-beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: kkb-celery-beat
+    restart: unless-stopped
+    command: celery -A app.workers.celery_app beat -l info
+    environment:
+      - DATABASE_URL=postgresql://kkb:hackathon2024@postgres:5432/firma_istihbarat
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - kkb-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
+  qdrantdata:
+    driver: local
+
+# ============================================
+# Networks
+# ============================================
+networks:
+  kkb-network:
+    driver: bridge

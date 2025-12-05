@@ -1,0 +1,100 @@
+"""
+Report Service
+Rapor iş mantığı
+"""
+from typing import Optional, List
+from sqlalchemy.orm import Session
+from uuid import UUID
+from datetime import datetime
+
+from app.models.report import Report, ReportStatus
+
+
+class ReportService:
+    """Rapor servis sınıfı"""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, company_name: str, company_tax_no: Optional[str] = None) -> Report:
+        """Yeni rapor oluştur"""
+        report = Report(
+            company_name=company_name,
+            company_tax_no=company_tax_no,
+            status=ReportStatus.PENDING.value
+        )
+        self.db.add(report)
+        self.db.commit()
+        self.db.refresh(report)
+        return report
+
+    def get_by_id(self, report_id: UUID) -> Optional[Report]:
+        """ID ile rapor getir"""
+        return self.db.query(Report).filter(
+            Report.id == report_id,
+            Report.deleted_at.is_(None)
+        ).first()
+
+    def list(
+        self,
+        page: int = 1,
+        limit: int = 10,
+        status: Optional[str] = None
+    ) -> tuple[List[Report], int]:
+        """Raporları listele"""
+        query = self.db.query(Report).filter(Report.deleted_at.is_(None))
+
+        if status:
+            query = query.filter(Report.status == status)
+
+        total = query.count()
+        reports = query.order_by(Report.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+        return reports, total
+
+    def update_status(self, report_id: UUID, status: str, message: Optional[str] = None) -> Optional[Report]:
+        """Rapor durumunu güncelle"""
+        report = self.get_by_id(report_id)
+        if report:
+            report.status = status
+            if message:
+                report.status_message = message
+            if status == ReportStatus.PROCESSING.value:
+                report.started_at = datetime.utcnow()
+            elif status == ReportStatus.COMPLETED.value:
+                report.completed_at = datetime.utcnow()
+                if report.started_at:
+                    report.duration_seconds = int((report.completed_at - report.started_at).total_seconds())
+            self.db.commit()
+            self.db.refresh(report)
+        return report
+
+    def update_result(
+        self,
+        report_id: UUID,
+        final_score: int,
+        risk_level: str,
+        decision: str,
+        decision_summary: Optional[str] = None
+    ) -> Optional[Report]:
+        """Rapor sonucunu güncelle"""
+        report = self.get_by_id(report_id)
+        if report:
+            report.final_score = final_score
+            report.risk_level = risk_level
+            report.decision = decision
+            report.decision_summary = decision_summary
+            self.db.commit()
+            self.db.refresh(report)
+        return report
+
+    def delete(self, report_id: UUID) -> bool:
+        """Raporu sil (soft delete)"""
+        report = self.get_by_id(report_id)
+        if report:
+            if report.status == ReportStatus.PROCESSING.value:
+                raise ValueError("İşlemi devam eden rapor silinemez")
+            report.deleted_at = datetime.utcnow()
+            self.db.commit()
+            return True
+        return False

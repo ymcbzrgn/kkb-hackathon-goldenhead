@@ -40,3 +40,6 @@ coverage/
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
+
+# Personal Claude Code config (her kişi kendi CLAUDE.md'sini kullanır)
+CLAUDE.md
