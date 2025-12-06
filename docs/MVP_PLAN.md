@@ -293,6 +293,7 @@ dev/bartin    → Backend development
 dev/yamac     → AI/ML development
 ```
 
+
 ---
 
 ## Checklist - MVP Tamamlanma Kriterleri
@@ -382,6 +383,224 @@ dev/yamac     → AI/ML development
 
 ---
 
+## Mevcut Kod Analizi (6 Aralık Güncellemesi)
+
+### Genel Durum Tablosu
+
+| Bileşen | Durum | Açıklama |
+|---------|-------|----------|
+| **LLM Client** | ✅ 100% | Streaming, Vision, Embedding TAM |
+| **Council Service** | ✅ 95% | 8 aşamalı toplantı, prompts TAM |
+| **Orchestrator** | ✅ 100% | Paralel agent yönetimi TAM |
+| **Base Agent** | ✅ 100% | Progress tracking TAM |
+| **WebSocket** | ✅ 100% | Event'ler, heartbeat TAM |
+| **TSG Agent** | ⚠️ 40% | **3 TODO - Scraping MOCK** |
+| **İhale Agent** | ⚠️ 50% | **1 TODO - EKAP MOCK** |
+| **News Agent** | ⚠️ 50% | **2 TODO - Scraping MOCK** |
+| **Reports API** | ⚠️ 60% | Schema OK, DB ops TODO |
+
+---
+
+## Kişi Bazlı Görev Kartları
+
+---
+
+### YAMAÇ - AI/ML Görevleri
+
+#### GÜN 1: Agent Implementasyonları
+
+**GÖREV 1.1: TSG Agent - Web Scraping**
+```
+Dosya: backend/app/agents/tsg_agent.py (Satır 77)
+Süre: 3-4 saat
+
+Yapılacaklar:
+1. [ ] Playwright ile https://www.ticaretsicil.gov.tr aç
+2. [ ] Firma adını arama kutusuna yaz
+3. [ ] Sonuç listesinden ilgili kayıtları bul
+4. [ ] PDF linklerini topla
+
+Kabul Kriterleri:
+- [ ] Arama sonuç döndürüyor
+- [ ] PDF linkleri liste olarak dönüyor
+- [ ] Timeout handling var (30 saniye)
+- [ ] Firma bulunamazsa graceful error
+
+Fallback: Mock data ile devam et (zaten var)
+```
+
+**GÖREV 1.2: TSG Agent - PDF Vision**
+```
+Dosya: backend/app/agents/tsg_agent.py (Satır 91)
+Süre: 2-3 saat
+Bağımlılık: GÖREV 1.1
+
+Yapılacaklar:
+1. [ ] PDF'leri indir (httpx ile)
+2. [ ] Base64'e çevir
+3. [ ] LLMClient.vision_pdf() ile oku
+4. [ ] Structured data çıkar
+
+Kabul Kriterleri:
+- [ ] Vision API çağrısı başarılı
+- [ ] JSON formatında veri dönüyor
+- [ ] Hata durumunda boş data (crash yok)
+```
+
+**GÖREV 1.3: İhale Agent - EKAP Scraping**
+```
+Dosya: backend/app/agents/ihale_agent.py (Satır 60)
+Süre: 2 saat
+
+Yapılacaklar:
+1. [ ] EKAP yasaklı listesi arama
+2. [ ] Yasaklı durumunu kontrol et
+3. [ ] Yasak varsa detayları çek
+
+Kabul Kriterleri:
+- [ ] yasak_durumu: True/False döndürüyor
+- [ ] Timeout handling var
+
+Not: EKAP erişimi zorsa → manuel checkbox
+```
+
+**GÖREV 1.4: News Agent - Haber Scraping**
+```
+Dosya: backend/app/agents/news_agent.py (Satır 77)
+Süre: 2-3 saat
+
+Yapılacaklar:
+1. [ ] Google News veya haber sitesi scraping
+2. [ ] Son 12 ayın haberlerini topla
+3. [ ] Başlık, kaynak, tarih, URL çek
+
+Kabul Kriterleri:
+- [ ] Minimum 5 haber döndürüyor
+- [ ] Rate limiting var
+```
+
+**GÖREV 1.5: News Agent - LLM Sentiment**
+```
+Dosya: backend/app/agents/news_agent.py (Satır 111)
+Süre: 1-2 saat
+
+Yapılacaklar:
+1. [ ] LLMClient.analyze_sentiment() kullan
+2. [ ] Her haber için pozitif/negatif/nötr belirle
+
+Kabul Kriterleri:
+- [ ] LLM sentiment skoru 0.0-1.0 arası
+- [ ] Açıklama dönüyor
+```
+
+---
+
+### BARTIN - Backend Görevleri
+
+#### GÜN 1: API & Database
+
+**GÖREV B1.1: Reports CRUD**
+```
+Dosya: backend/app/api/routes/reports.py
+Süre: 3-4 saat
+
+Yapılacaklar:
+1. [ ] POST /api/reports → DB'ye kaydet + Celery task başlat
+2. [ ] GET /api/reports → DB'den listele
+3. [ ] GET /api/reports/{id} → Detay getir
+4. [ ] DELETE /api/reports/{id} → Soft delete
+
+Kabul Kriterleri:
+- [ ] curl ile POST çalışıyor
+- [ ] report_id UUID dönüyor
+- [ ] Celery task tetikleniyor
+```
+
+**GÖREV B1.2: Celery Task Integration**
+```
+Dosya: backend/app/workers/tasks.py
+Süre: 2 saat
+
+Yapılacaklar:
+1. [ ] generate_report_task içinde Orchestrator çağır
+2. [ ] Sonuçları DB'ye kaydet
+3. [ ] Status güncelle (processing → completed)
+```
+
+---
+
+### BEKİR - Frontend Görevleri
+
+#### GÜN 1: API Entegrasyonu
+
+**GÖREV F1.1: WebSocket Hook**
+```
+Dosya: frontend/src/hooks/useWebSocket.ts
+Süre: 2-3 saat
+
+Yapılacaklar:
+1. [ ] WebSocket bağlantısı aç
+2. [ ] Event listener'ları kur
+3. [ ] Reconnect logic ekle
+
+Event'ler: job_started, agent_progress, council_speech, council_decision
+```
+
+**GÖREV F1.2: Agent Progress UI**
+```
+Süre: 2-3 saat
+
+Yapılacaklar:
+1. [ ] 3 agent için progress bar
+2. [ ] Her agent'ın durumunu göster
+3. [ ] agent_progress event'lerini dinle
+```
+
+#### GÜN 2: Council UI
+
+**GÖREV F2.1: Council Streaming**
+```
+Süre: 3-4 saat
+
+Yapılacaklar:
+1. [ ] council_speaker_changed → Konuşmacıyı göster
+2. [ ] council_speech → Streaming text
+3. [ ] council_decision → Final karar göster
+```
+
+---
+
+## Demo Hazırlık
+
+### Demo Firmaları (Belirlenmeli)
+```
+1. DÜŞÜK RİSK: _______________  (Beklenen: 15-30, ONAY)
+2. ORTA RİSK:  _______________  (Beklenen: 35-55, ŞARTLI ONAY)
+3. YÜKSEK RİSK: ______________ (Beklenen: 65+, RED)
+```
+
+### Demo Script (5 dakika)
+```
+0:00-0:30  → Sistem tanıtımı
+0:30-1:00  → Firma adı girişi
+1:00-2:30  → Agent'ların çalışması
+2:30-4:00  → Council toplantısı
+4:00-5:00  → Final rapor
+```
+
+---
+
+## Acil Kontrol Listesi
+
+### Başlamadan Önce
+- [ ] Docker servisleri çalışıyor mu? (PostgreSQL, Redis, Qdrant)
+- [ ] KKB_API_KEY .env'de set edildi mi?
+- [ ] Backend başlıyor mu? (`python main.py`)
+- [ ] Frontend başlıyor mu? (`npm run dev`)
+- [ ] Celery worker başlıyor mu?
+
+---
+
 ## Notlar ve Kararlar
 
 ### Alınan Kararlar
@@ -399,4 +618,4 @@ dev/yamac     → AI/ML development
 ---
 
 > **Bu döküman canlı bir dökümandır.** Her gün güncellenir.
-> Son güncelleme: 6 Aralık 2024, 00:51
+> Son güncelleme: 6 Aralık 2024
