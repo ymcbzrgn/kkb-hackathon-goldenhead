@@ -3,6 +3,7 @@ Reports API Endpoints
 Rapor CRUD işlemleri
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -10,6 +11,8 @@ from uuid import UUID
 
 from app.core.database import get_db
 from app.services.report_service import ReportService
+from app.services.pdf_export import PDFExportService
+from app.models.report import ReportStatus
 from app.workers.tasks import generate_report_task
 
 
@@ -258,16 +261,105 @@ async def export_pdf(
     Raporun PDF versiyonunu indirir.
     Sadece completed durumundaki raporlar için çalışır.
     """
-    # TODO: PDF oluştur ve döndür
-
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "REPORT_NOT_COMPLETED",
-                "message": "Tamamlanmamış raporun PDF'i oluşturulamaz"
+    # 1. UUID validation
+    try:
+        report_uuid = UUID(report_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "INVALID_REPORT_ID",
+                    "message": "Geçersiz rapor ID formatı"
+                }
             }
+        )
+
+    # 2. Raporu getir
+    report_service = ReportService(db)
+    report = report_service.get_by_id(report_uuid)
+
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "REPORT_NOT_FOUND",
+                    "message": "Rapor bulunamadı"
+                }
+            }
+        )
+
+    # 3. Rapor tamamlanmış mı kontrol et
+    if report.status != ReportStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "REPORT_NOT_COMPLETED",
+                    "message": "Tamamlanmamış raporun PDF'i oluşturulamaz"
+                }
+            }
+        )
+
+    # 4. Rapor verisini hazırla
+    report_data = {
+        "company_name": report.company_name,
+        "company_tax_no": report.company_tax_no,
+        "final_score": report.final_score,
+        "risk_level": report.risk_level,
+        "decision": report.decision,
+        "decision_summary": report.decision_summary,
+        "created_at": report.created_at,
+        "completed_at": report.completed_at,
+        "duration_seconds": report.duration_seconds,
+        "agent_results": {},
+        "council_decision": None
+    }
+
+    # 5. Agent sonuçlarını ekle
+    if report.agent_results:
+        for result in report.agent_results:
+            if result.agent_type:
+                report_data["agent_results"][result.agent_type] = {
+                    "summary": result.summary,
+                    "key_findings": result.key_findings,
+                    "warning_flags": result.warning_flags,
+                    "processed_data": result.processed_data
+                }
+
+    # 6. Council kararını ekle
+    if report.council_decision:
+        report_data["council_decision"] = {
+            "final_score": report.council_decision.final_score,
+            "risk_level": report.council_decision.risk_level,
+            "decision": report.council_decision.decision,
+            "consensus": float(report.council_decision.consensus) if report.council_decision.consensus else None,
+            "initial_scores": report.council_decision.initial_scores,
+            "final_scores": report.council_decision.final_scores,
+            "conditions": report.council_decision.conditions,
+            "dissent_note": report.council_decision.dissent_note,
+            "decision_rationale": report.council_decision.decision_rationale
+        }
+
+    # 7. PDF oluştur
+    pdf_service = PDFExportService()
+    pdf_buffer = pdf_service.generate_report_pdf(report_data)
+
+    # 8. Dosya adı oluştur
+    filename = pdf_service.generate_filename(report.company_name)
+
+    # 9. PDF'i döndür
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
         }
     )

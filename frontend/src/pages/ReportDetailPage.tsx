@@ -43,9 +43,48 @@ export function ReportDetailPage() {
     }
   };
 
-  const handleDownloadPdf = () => {
-    // TODO: Implement PDF download
-    alert('PDF indirme özelliği henüz aktif değil.');
+  const handleDownloadPdf = async () => {
+    try {
+      // API çağrısı
+      const response = await fetch(`/api/reports/${id}/pdf`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/pdf',
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || 'PDF indirilemedi');
+      }
+
+      // PDF blob'unu al
+      const blob = await response.blob();
+
+      // Dosya adını response header'dan al
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = 'rapor.pdf';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // Blob'u indir
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error('PDF indirme hatası:', error);
+      alert(error instanceof Error ? error.message : 'PDF indirilemedi');
+    }
   };
 
   if (isLoading) {
