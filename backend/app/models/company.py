@@ -44,7 +44,7 @@ class Company(Base):
     last_updated = Column(DateTime(timezone=True))
 
     # Metadata
-    metadata = Column(JSONB, default={})
+    meta_data = Column("metadata", JSONB, default={})
 
     # Audit Fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -71,7 +71,7 @@ class Category(Base):
     sort_order = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     is_default = Column(Boolean, default=False)
-    metadata = Column(JSONB, default={})
+    meta_data = Column("metadata", JSONB, default={})
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True))

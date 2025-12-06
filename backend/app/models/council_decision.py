@@ -60,7 +60,7 @@ class AgentResult(Base):
     source_count = Column(Integer)
 
     # Metadata
-    metadata = Column(JSONB, default={})
+    meta_data = Column("metadata", JSONB, default={})
 
     # Audit Fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -118,7 +118,7 @@ class CouncilDecision(Base):
     phases_completed = Column(JSONB, default={})
 
     # Metadata
-    metadata = Column(JSONB, default={})
+    meta_data = Column("metadata", JSONB, default={})
 
     # Audit Fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
