@@ -14,10 +14,10 @@ from app.core.config import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    print("🚀 Firma İstihbarat API başlatılıyor...")
+    print("[INFO] Firma Istihbarat API baslatiliyor...")
     yield
     # Shutdown
-    print("👋 Firma İstihbarat API kapatılıyor...")
+    print("[INFO] Firma Istihbarat API kapatiliyor...")
 
 
 app = FastAPI(
