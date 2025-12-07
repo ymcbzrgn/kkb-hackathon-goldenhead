@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
 
-    # KKB Kloudeks LLM API
-    KKB_API_URL: str = "https://llmgateway.klfrm.com/api/v1"
+    # KKB Kloudeks LLM API (MIA)
+    KKB_API_URL: str = "https://mia.csp.kloudeks.com/v1"
     KKB_API_KEY: str = ""
 
     # App Settings

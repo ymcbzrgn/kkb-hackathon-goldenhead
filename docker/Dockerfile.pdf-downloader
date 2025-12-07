@@ -1,0 +1,68 @@
+# PDF Download Service - İzole Container
+# TSG'den PDF indirip metin çıkarır
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System dependencies for Playwright + Chrome
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    wget \
+    # Playwright/Chrome dependencies
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgtk-3-0 \
+    # Fonts for Turkish characters
+    fonts-liberation \
+    fonts-dejavu-core \
+    # PDF utilities
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY backend/requirements-pdf.txt .
+RUN pip install --no-cache-dir -r requirements-pdf.txt
+
+# Install Playwright browsers (Chromium only)
+RUN playwright install chromium
+RUN playwright install-deps chromium
+
+# App code
+COPY backend/app/services/pdf_download_service.py /app/
+
+# Download directory
+RUN mkdir -p /app/downloads
+
+# Non-root user for security
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Environment
+ENV DOWNLOAD_DIR=/app/downloads
+ENV DEBUG=false
+ENV PORT=8001
+ENV HOST=0.0.0.0
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8001/health || exit 1
+
+EXPOSE 8001
+
+CMD ["python", "-m", "uvicorn", "pdf_download_service:app", "--host", "0.0.0.0", "--port", "8001"]

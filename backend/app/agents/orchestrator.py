@@ -6,7 +6,7 @@ import asyncio
 from typing import Callable, Dict, Optional, Any
 from datetime import datetime
 
-from app.agents.tsg_agent import TSGAgent
+from app.agents.tsg import TSGAgent
 from app.agents.ihale_agent import IhaleAgent
 from app.agents.news_agent import NewsAgent
 from app.agents.base_agent import AgentResult, AgentProgress
