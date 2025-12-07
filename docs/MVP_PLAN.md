@@ -1,12 +1,12 @@
 # MVP Plan - KKB Firma İstihbarat Sistemi
 
 > **Teslim Tarihi:** 4 Gün Sonra
-> **Son Güncelleme:** 6 Aralık 2024
+> **Son Güncelleme:** 7 Aralık 2024
 > **PM:** Yamaç
 
 ---
 
-## Mevcut Durum (6 Aralık 2024)
+## Mevcut Durum (7 Aralık 2024)
 
 ### Tamamlanan İşler
 
@@ -19,9 +19,9 @@
 | **Docker Setup** | ✅ %100 | PostgreSQL, Redis, Qdrant, pgAdmin çalışıyor |
 | **Database Schema** | ✅ %100 | Tüm tablolar ve indexler oluşturuldu |
 | **WebSocket** | ✅ %100 | Temel bağlantı çalışıyor |
-| **Agent Yapısı** | ✅ %60 | Base agent, orchestrator iskelet hazır |
-| **Council Yapısı** | ✅ %70 | Personas, prompts, service iskelet hazır |
-| **LLM Client** | ✅ %80 | Client, streaming, vision, embedding hazır |
+| **Agent Yapısı** | ✅ %85 | TSG Agent %100, Orchestrator %100, İhale/News mock |
+| **Council Yapısı** | ✅ %100 | 8 aşamalı toplantı, streaming TAM |
+| **LLM Client** | ✅ %100 | Client, streaming, vision, embedding TAM |
 
 ### Eksik/TODO Listesi
 
@@ -33,10 +33,10 @@ Backend (Bartın):
 └── Celery tasks    → Background job (1 TODO)
 
 AI/ML (Yamaç):
-├── tsg_agent.py    → TSG scraping + Vision (3 TODO)
-├── ihale_agent.py  → EKAP scraping (1 TODO)
+├── tsg_agent.py    → ✅ TAMAMLANDI (Vision + CAPTCHA + PDF gen)
+├── ihale_agent.py  → EKAP scraping - Agentic yapı (IN PROGRESS)
 ├── news_agent.py   → Haber + Sentiment (2 TODO)
-└── council_service → Tam implementasyon
+└── council_service → ✅ TAMAMLANDI (8 aşama, streaming)
 ```
 
 ---
@@ -68,8 +68,8 @@ AI/ML (Yamaç):
 
 | Özellik | Açıklama | Öncelik |
 |---------|----------|---------|
-| **Council Toplantısı** | 6 kişilik AI komite (BONUS!) | Orta |
-| Council Streaming | Canlı konuşma gösterimi | Orta |
+| ~~Council Toplantısı~~ | ~~6 kişilik AI komite~~ | ✅ **TAMAMLANDI!** |
+| ~~Council Streaming~~ | ~~Canlı konuşma gösterimi~~ | ✅ **TAMAMLANDI!** |
 | PDF Export | Rapor PDF indirme | Düşük |
 | Qdrant RAG | Geçmiş raporlardan öğrenme | Düşük |
 | Skor Revizyonu | Tartışma sonrası skor değişimi | Düşük |
@@ -99,9 +99,9 @@ AI/ML (Yamaç):
 | **Bekir** | Agent progress UI | İlerleme çubukları görünür |
 
 #### Gün Sonu Milestone
-- [ ] TSG Agent GERÇEK veri çekiyor
+- [x] TSG Agent GERÇEK veri çekiyor ✅
 - [ ] İhale Agent GERÇEK yasak kontrolü yapıyor
-- [ ] Rapor DB'ye kaydediliyor
+- [x] Rapor DB'ye kaydediliyor ✅
 
 ---
 
@@ -361,7 +361,11 @@ dev/yamac     → AI/ML development
 | 00:51 | Yamaç | Monorepo yapısı tamamlandı | ✅ |
 | 00:51 | Yamaç | E2E testleri geçti | ✅ |
 | 00:51 | Yamaç | MVP_PLAN.md oluşturuldu | ✅ |
-| | | | |
+| 23:00 | Yamaç | TSG Agent v9.3 tamamlandı (1,312+ satır) | ✅ |
+| 23:00 | Yamaç | CAPTCHA çözümü eklendi (Tesseract OCR) | ✅ |
+| 23:00 | Yamaç | PDF generator eklendi | ✅ |
+| 23:00 | Yamaç | Council Service %100 tamamlandı (533 satır) | ✅ |
+| 23:00 | Yamaç | LLM Client %100 tamamlandı | ✅ |
 
 ### 7 Aralık (Gün 2)
 
@@ -383,20 +387,20 @@ dev/yamac     → AI/ML development
 
 ---
 
-## Mevcut Kod Analizi (6 Aralık Güncellemesi)
+## Mevcut Kod Analizi (7 Aralık Güncellemesi)
 
 ### Genel Durum Tablosu
 
 | Bileşen | Durum | Açıklama |
 |---------|-------|----------|
 | **LLM Client** | ✅ 100% | Streaming, Vision, Embedding TAM |
-| **Council Service** | ✅ 95% | 8 aşamalı toplantı, prompts TAM |
+| **Council Service** | ✅ 100% | 8 aşamalı toplantı, streaming TAM |
 | **Orchestrator** | ✅ 100% | Paralel agent yönetimi TAM |
 | **Base Agent** | ✅ 100% | Progress tracking TAM |
 | **WebSocket** | ✅ 100% | Event'ler, heartbeat TAM |
-| **TSG Agent** | ⚠️ 40% | **3 TODO - Scraping MOCK** |
-| **İhale Agent** | ⚠️ 50% | **1 TODO - EKAP MOCK** |
-| **News Agent** | ⚠️ 50% | **2 TODO - Scraping MOCK** |
+| **TSG Agent** | ✅ 100% | **Vision AI, CAPTCHA, PDF gen TAM** |
+| **İhale Agent** | ⚠️ 20% | **Interface hazır, EKAP MOCK - Agentic yapıya geçiliyor** |
+| **News Agent** | ⚠️ 20% | **Interface hazır, Haber MOCK** |
 | **Reports API** | ⚠️ 60% | Schema OK, DB ops TODO |
 
 ---
@@ -409,59 +413,53 @@ dev/yamac     → AI/ML development
 
 #### GÜN 1: Agent Implementasyonları
 
-**GÖREV 1.1: TSG Agent - Web Scraping**
+**GÖREV 1.1: TSG Agent - Web Scraping** ✅ TAMAMLANDI
 ```
-Dosya: backend/app/agents/tsg_agent.py (Satır 77)
-Süre: 3-4 saat
+Dosya: backend/app/agents/tsg/scraper.py (1,357 satır)
+Durum: TAMAMLANDI
 
-Yapılacaklar:
-1. [ ] Playwright ile https://www.ticaretsicil.gov.tr aç
-2. [ ] Firma adını arama kutusuna yaz
-3. [ ] Sonuç listesinden ilgili kayıtları bul
-4. [ ] PDF linklerini topla
+Yapılanlar:
+1. [x] Playwright ile TSG sitesine bağlantı
+2. [x] CAPTCHA çözümü (Tesseract OCR)
+3. [x] Firma arama + şehir filtresi
+4. [x] Multi-PDF indirme stratejisi (YÖNETIM → KURULUS → SERMAYE)
+5. [x] Gazete sayfası screenshot
 
-Kabul Kriterleri:
-- [ ] Arama sonuç döndürüyor
-- [ ] PDF linkleri liste olarak dönüyor
-- [ ] Timeout handling var (30 saniye)
-- [ ] Firma bulunamazsa graceful error
-
-Fallback: Mock data ile devam et (zaten var)
+Çıktı: 8 zorunlu alan (Firma Unvanı, Tescil Konusu, Mersis No, vb.)
 ```
 
-**GÖREV 1.2: TSG Agent - PDF Vision**
+**GÖREV 1.2: TSG Agent - PDF Vision** ✅ TAMAMLANDI
 ```
-Dosya: backend/app/agents/tsg_agent.py (Satır 91)
-Süre: 2-3 saat
-Bağımlılık: GÖREV 1.1
+Dosya: backend/app/agents/tsg/agent.py (1,312 satır)
+Durum: TAMAMLANDI
 
-Yapılacaklar:
-1. [ ] PDF'leri indir (httpx ile)
-2. [ ] Base64'e çevir
-3. [ ] LLMClient.vision_pdf() ile oku
-4. [ ] Structured data çıkar
+Yapılanlar:
+1. [x] LLM Vision API entegrasyonu
+2. [x] PDF okuma + OCR
+3. [x] Structured JSON çıkarma
+4. [x] PDF generator (profesyonel gazete sayfası)
+5. [x] 5 dakika time limit (hackathon güvenliği)
 
-Kabul Kriterleri:
-- [ ] Vision API çağrısı başarılı
-- [ ] JSON formatında veri dönüyor
-- [ ] Hata durumunda boş data (crash yok)
+Modül: backend/app/agents/tsg/ (7 dosya, 4,000+ satır)
 ```
 
-**GÖREV 1.3: İhale Agent - EKAP Scraping**
+**GÖREV 1.3: İhale Agent - EKAP Scraping** 🔄 IN PROGRESS (Agentic Yapı)
 ```
-Dosya: backend/app/agents/ihale_agent.py (Satır 60)
-Süre: 2 saat
+Yeni Modül: backend/app/agents/ekap/
+Durum: BAŞLIYOR
 
-Yapılacaklar:
-1. [ ] EKAP yasaklı listesi arama
-2. [ ] Yasaklı durumunu kontrol et
-3. [ ] Yasak varsa detayları çek
+TSG tarzı agentic yapı ile yeniden yazılıyor:
+1. [ ] ekap/logger.py - TSG'den kopyala
+2. [ ] ekap/scraper.py - Playwright ile EKAP scraping
+3. [ ] ekap/company_finder.py - LLM ile firma doğrulama (temperature=0.0)
+4. [ ] ekap/agent.py - System + User prompt ayrımı (temperature=0.1)
 
-Kabul Kriterleri:
-- [ ] yasak_durumu: True/False döndürüyor
-- [ ] Timeout handling var
+LLM Stratejisi:
+- company_finder: Firma eşleştirme (EVET/HAYIR) - temp=0.0
+- agent: Yasak analizi (JSON) - temp=0.1
+- System + User prompt ayrımı → %80 token tasarrufu
 
-Not: EKAP erişimi zorsa → manuel checkbox
+Kaynak: https://ekapv2.kik.gov.tr/sorgulamalar/yasak-sorgulama
 ```
 
 **GÖREV 1.4: News Agent - Haber Scraping**
@@ -611,9 +609,9 @@ Yapılacaklar:
 
 ### Açık Sorular
 
-1. KKB API rate limit var mı?
-2. TSG'de captcha var mı?
-3. Demo için hangi firmalar kullanılacak?
+1. ~~KKB API rate limit var mı?~~ → ✅ Hayır, sınırsız
+2. ~~TSG'de captcha var mı?~~ → ✅ EVET, Tesseract OCR ile çözüldü
+3. Demo için hangi firmalar kullanılacak? → Belirlenmeli
 
 ---
 
