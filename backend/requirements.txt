@@ -21,6 +21,8 @@ aiohttp>=3.9.0
 playwright>=1.40.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+undetected-chromedriver>=3.5.0
+selenium>=4.15.0
 
 # Vector DB
 qdrant-client>=1.6.0
@@ -33,6 +35,12 @@ pydantic-settings>=2.1.0
 # PDF Processing
 PyPDF2>=3.0.0
 pdf2image>=1.16.0
+reportlab>=4.0.0
+
+# OCR
+pytesseract>=0.3.10
+numpy>=1.24.0
+Pillow>=10.0.0
 
 # Testing
 pytest>=7.4.0
