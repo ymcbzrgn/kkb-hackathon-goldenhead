@@ -66,7 +66,8 @@ class LLMClient:
             )
             response.raise_for_status()
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            content = data["choices"][0]["message"].get("content")
+            return content if content else ""
 
     async def chat_stream(
         self,

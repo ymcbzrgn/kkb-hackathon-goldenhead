@@ -157,6 +157,33 @@ services:
     networks:
       - kkb-network
 
+  # ============================================
+  # PDF Download Service (v6.0)
+  # İzole container ile TSG PDF indirme
+  # ============================================
+  pdf-downloader:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.pdf-downloader
+    container_name: kkb-pdf-downloader
+    restart: unless-stopped
+    environment:
+      - TSG_USERNAME=${TSG_USERNAME:-}
+      - TSG_PASSWORD=${TSG_PASSWORD:-}
+      - DEBUG=${DEBUG:-false}
+      - DOWNLOAD_DIR=/app/downloads
+    ports:
+      - "8001:8001"
+    volumes:
+      - pdf-downloads:/app/downloads
+    networks:
+      - kkb-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # ============================================
 # Volumes
 # ============================================
@@ -166,6 +193,8 @@ volumes:
   redisdata:
     driver: local
   qdrantdata:
+    driver: local
+  pdf-downloads:
     driver: local
 
 # ============================================
