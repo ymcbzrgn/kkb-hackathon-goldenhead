@@ -49,12 +49,15 @@ TSG_SYSTEM_PROMPT = """Sen bir Ticaret Sicili Gazetesi (TSG) analiz uzmanisin.
 GOREV:
 Verilen TSG ilanindan sirket bilgilerini cikar ve JSON formatinda dondur.
 
-ZORUNLU ALANLAR (Hackathon Kurali - 5 Baslik):
+ZORUNLU ALANLAR (8 Baslik):
 1. Firma Unvani: Sirketin tam resmi adi
 2. Tescil Konusu: Islem turu (kurulus, sermaye artirimi, yonetici degisikligi vb.)
 3. Mersis Numarasi: 16 haneli numara (varsa)
 4. Yoneticiler: Yonetim kurulu uyeleri / mudur isimleri (liste)
 5. Imza Yetkilisi: Sirketi temsile yetkili kisi(ler)
+6. Sermaye: Sirket sermayesi (ornegin: "10.000.000 TL")
+7. Kurulus_Tarihi: Sirketin kurulus tarihi (ornegin: "15.03.2018")
+8. Faaliyet_Konusu: Sirketin faaliyet alani (kisa ozet)
 
 KURALLAR:
 - SADECE metinde ACIKCA yazan bilgileri cikar
@@ -70,7 +73,10 @@ Sadece JSON dondur, aciklama yapma!
     "Tescil Konusu": "string veya null",
     "Mersis Numarasi": "string veya null",
     "Yoneticiler": ["isim1", "isim2"] veya null,
-    "Imza Yetkilisi": "string veya null"
+    "Imza Yetkilisi": "string veya null",
+    "Sermaye": "string veya null",
+    "Kurulus_Tarihi": "string veya null",
+    "Faaliyet_Konusu": "string veya null"
 }"""
 
 # v9.1 - MULTI_ILAN_PROMPT kaldirildi, TSG_SYSTEM_PROMPT kullaniliyor
@@ -334,8 +340,11 @@ class TSGAgent(BaseAgent):
             response_clean = self._clean_json_response(response)
             data = json.loads(response_clean)
 
-            # Zorunlu alanlari kontrol et
-            required_fields = ["Firma Unvani", "Tescil Konusu", "Mersis Numarasi", "Yoneticiler", "Imza Yetkilisi"]
+            # Zorunlu alanlari kontrol et (v9.3 - 8 alan)
+            required_fields = [
+                "Firma Unvani", "Tescil Konusu", "Mersis Numarasi", "Yoneticiler", "Imza Yetkilisi",
+                "Sermaye", "Kurulus_Tarihi", "Faaliyet_Konusu"
+            ]
             for field in required_fields:
                 if field not in data:
                     data[field] = None
@@ -358,7 +367,11 @@ class TSGAgent(BaseAgent):
             "Tescil Konusu": None,
             "Mersis Numarasi": None,
             "Yoneticiler": [],
-            "Imza Yetkilisi": None
+            "Imza Yetkilisi": None,
+            # v9.3 - Council icin ek alanlar
+            "Sermaye": None,
+            "Kurulus_Tarihi": None,
+            "Faaliyet_Konusu": None,
         }
 
     # =====================================================
@@ -936,9 +949,10 @@ SADECE JSON dondur, baska aciklama yapma!"""
         Hackathon uyumlu final output olustur.
 
         Hackathon gereksinimleri:
-        1. Yapilandirilmis veri (5 baslik)
+        1. Yapilandirilmis veri (8 baslik - v9.3)
         2. Gazete sayfasi screenshot path
         3. Meta bilgiler
+        4. Sicil bilgisi (tablo verisinden)
         """
         return {
             "firma_adi": company_name,
@@ -955,6 +969,11 @@ SADECE JSON dondur, baska aciklama yapma!"""
                     "detay_url": gazete_info.get("detay_url", ""),
                 },
                 "yapilandirilmis_veri": yapilandirilmis_veri,
+                # v9.3 - Council icin sicil bilgisi (tablo verisinden)
+                "sicil_bilgisi": {
+                    "sicil_no": selected_ilan.get("sicil_no"),
+                    "sicil_mudurlugu": selected_ilan.get("sicil_mudurlugu"),
+                },
             },
             "veri_kaynagi": "TSG",
             "status": "completed"
