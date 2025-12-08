@@ -6,11 +6,12 @@ import asyncio
 from typing import Callable, Dict, Optional, Any
 from datetime import datetime
 
-from app.agents.tsg import TSGAgent
+from app.agents.tsg.agent import TSGAgent
 from app.agents.ihale_agent import IhaleAgent
 from app.agents.news_agent import NewsAgent
 from app.agents.base_agent import AgentResult, AgentProgress
 from app.council.council_service import CouncilService
+from app.services.report_generator import ReportGenerator
 from app.api.websocket import manager as ws_manager
 
 
@@ -25,9 +26,15 @@ class Orchestrator:
     4. WebSocket üzerinden ilerleme bildir
     """
 
-    def __init__(self, report_id: str, ws_callback: Optional[Callable] = None):
+    def __init__(
+        self,
+        report_id: str,
+        ws_callback: Optional[Callable] = None,
+        db_callback: Optional[Callable] = None
+    ):
         self.report_id = report_id
         self.ws_callback = ws_callback or self._default_ws_callback
+        self.db_callback = db_callback  # Progress'i DB'ye kaydetmek için
 
         # Agent'ları oluştur
         self.tsg_agent = TSGAgent()
@@ -43,10 +50,28 @@ class Orchestrator:
         self.news_agent.set_progress_callback(self._create_progress_handler("news_agent"))
 
     def _create_progress_handler(self, agent_id: str) -> Callable:
-        """Agent progress handler oluştur"""
-        async def handler(progress: AgentProgress):
-            await self._send_agent_progress(agent_id, progress.progress, progress.message)
-        return lambda p: asyncio.create_task(handler(p))
+        """Agent progress handler oluştur - sync callback, DB + Redis Pub/Sub"""
+        def sync_handler(progress: AgentProgress):
+            # 1. DB'ye kaydet (sync, hemen)
+            if self.db_callback:
+                try:
+                    self.db_callback(agent_id, progress.progress, progress.message)
+                except Exception as e:
+                    print(f"DB progress callback error: {e}")
+
+            # 2. Redis'e publish et (sync, WebSocket'e köprü)
+            try:
+                from app.services.redis_pubsub import publish_agent_progress
+                publish_agent_progress(
+                    report_id=self.report_id,
+                    agent_id=agent_id,
+                    progress=progress.progress,
+                    message=progress.message
+                )
+            except Exception as e:
+                print(f"Redis publish error: {e}")
+
+        return sync_handler
 
     async def _default_ws_callback(self, event_type: str, payload: Dict):
         """Varsayılan WebSocket callback"""
@@ -144,7 +169,26 @@ class Orchestrator:
                 })
 
         # ============================================
-        # AŞAMA 2: Council Toplantısı
+        # AŞAMA 2: İstihbarat Raporu Üret
+        # ============================================
+
+        report_generator = ReportGenerator()
+        intelligence_report = report_generator.generate(
+            company_name=company_name,
+            tsg_data=agent_results["tsg"].data if agent_results["tsg"].status == "completed" else None,
+            ihale_data=agent_results["ihale"].data if agent_results["ihale"].status == "completed" else None,
+            news_data=agent_results["news"].data if agent_results["news"].status == "completed" else None
+        )
+
+        # Rapor oluşturuldu event'i
+        await self._send_event("report_generated", {
+            "risk_skoru": intelligence_report["risk_ozeti"]["risk_skoru"],
+            "karar_onerisi": intelligence_report["risk_ozeti"]["karar_onerisi"],
+            "risk_seviyesi": intelligence_report["risk_ozeti"]["risk_seviyesi"]
+        })
+
+        # ============================================
+        # AŞAMA 3: Council Toplantısı
         # ============================================
 
         council_result = await self.council_service.run_meeting(
@@ -154,11 +198,12 @@ class Orchestrator:
                 "ihale": agent_results["ihale"].data if agent_results["ihale"].status == "completed" else None,
                 "news": agent_results["news"].data if agent_results["news"].status == "completed" else None
             },
+            intelligence_report=intelligence_report,
             ws_callback=self._send_event
         )
 
         # ============================================
-        # AŞAMA 3: Sonuç
+        # AŞAMA 4: Sonuç
         # ============================================
 
         end_time = datetime.utcnow()
@@ -177,6 +222,7 @@ class Orchestrator:
             "agent_results": {
                 k: v.to_dict() for k, v in agent_results.items()
             },
+            "intelligence_report": intelligence_report,
             "council_decision": council_result,
             "duration_seconds": duration
         }

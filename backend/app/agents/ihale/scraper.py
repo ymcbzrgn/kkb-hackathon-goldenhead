@@ -66,8 +66,8 @@ class ResmiGazeteScraper:
     PAGE_TIMEOUT = 30000  # 30 saniye
     REQUEST_DELAY = 1.5  # Rate limiting (saniye)
 
-    # Tarama ayarlari
-    DEFAULT_DAYS = 90  # Son 90 gun
+    # Tarama ayarlari (Demo: 7 gun, Production: 90 gun)
+    DEFAULT_DAYS = 7  # Son 7 gun
 
     def __init__(self):
         self.browser = None

@@ -38,6 +38,7 @@ class CouncilService:
         self,
         company_name: str,
         agent_data: Dict[str, Any],
+        intelligence_report: Optional[Dict[str, Any]] = None,
         ws_callback: Optional[Callable] = None
     ) -> Dict[str, Any]:
         """
@@ -46,6 +47,7 @@ class CouncilService:
         Args:
             company_name: Firma adı
             agent_data: Agent'lardan gelen veriler (tsg, ihale, news)
+            intelligence_report: Rule-based istihbarat raporu
             ws_callback: WebSocket callback fonksiyonu
 
         Returns:
@@ -71,7 +73,7 @@ class CouncilService:
             })
 
         # Context hazırla
-        context = self._prepare_context(company_name, agent_data)
+        context = self._prepare_context(company_name, agent_data, intelligence_report)
 
         # ============================================
         # AŞAMA 1: Açılış (Moderatör)
@@ -135,15 +137,104 @@ class CouncilService:
             "duration_seconds": duration
         }
 
-    def _prepare_context(self, company_name: str, agent_data: Dict) -> Dict:
+    def _prepare_context(
+        self,
+        company_name: str,
+        agent_data: Dict,
+        intelligence_report: Optional[Dict] = None
+    ) -> Dict:
         """Toplantı context'i hazırla"""
         return {
             "company_name": company_name,
             "tsg_data": agent_data.get("tsg"),
             "ihale_data": agent_data.get("ihale"),
             "news_data": agent_data.get("news"),
+            "intelligence_report": intelligence_report,
             "timestamp": datetime.utcnow().isoformat()
         }
+
+    def _format_agent_data(self, context: Dict) -> str:
+        """Agent verilerini LLM için okunabilir formatta hazırla"""
+        parts = []
+
+        # TSG Verileri
+        tsg_data = context.get("tsg_data")
+        if tsg_data:
+            tsg = tsg_data.get("tsg_sonuc", {}).get("yapilandirilmis_veri", {})
+            yoneticiler = tsg.get("Yoneticiler", [])
+            yonetici_str = ", ".join(yoneticiler) if yoneticiler else "Bilinmiyor"
+            parts.append(f"""
+TICARET SICIL BILGILERI:
+- Firma Unvani: {tsg.get("Firma Unvani", "Bilinmiyor")}
+- Sermaye: {tsg.get("Sermaye", "Bilinmiyor")}
+- Mersis No: {tsg.get("Mersis Numarasi", "Bilinmiyor")}
+- Kurulus Tarihi: {tsg.get("Kurulus_Tarihi", "Bilinmiyor")}
+- Faaliyet Alani: {tsg.get("Faaliyet_Konusu", "Bilinmiyor")}
+- Yoneticiler: {yonetici_str}""")
+        else:
+            parts.append("\nTICARET SICIL: Veri bulunamadi!")
+
+        # Ihale Verileri
+        ihale_data = context.get("ihale_data")
+        if ihale_data:
+            yasak_durumu = ihale_data.get("yasak_durumu", False)
+            yasak_str = "EVET - AKTIF YASAK!" if yasak_durumu else "Hayir"
+            parts.append(f"""
+IHALE DURUMU:
+- Aktif Yasak: {yasak_str}
+- Gecmis Yasak Sayisi: {ihale_data.get("bulunan_toplam_yasaklama", 0)}
+- Risk Degerlendirmesi: {ihale_data.get("risk_degerlendirmesi", "Bilinmiyor")}
+- Yasaklayan Kurum: {ihale_data.get("yasaklayan_kurum", "-")}
+- Yasak Suresi: {ihale_data.get("yasak_suresi", "-")}""")
+        else:
+            parts.append("\nIHALE DURUMU: Veri bulunamadi!")
+
+        # Haber Verileri
+        news_data = context.get("news_data")
+        if news_data:
+            ozet = news_data.get("ozet", {})
+            sentiment = ozet.get("sentiment_score", 0)
+            sentiment_str = "Olumlu" if sentiment > 0.1 else ("Olumsuz" if sentiment < -0.1 else "Notr")
+            parts.append(f"""
+MEDYA ANALIZI:
+- Toplam Haber: {ozet.get("toplam", 0)}
+- Olumlu Haber: {ozet.get("olumlu", 0)}
+- Olumsuz Haber: {ozet.get("olumsuz", 0)}
+- Sentiment Skoru: {sentiment:.2f} ({sentiment_str})
+- Trend: {ozet.get("trend", "Notr").upper()}""")
+        else:
+            parts.append("\nMEDYA ANALIZI: Veri bulunamadi!")
+
+        return "\n".join(parts)
+
+    def _format_intelligence_summary(self, intel: Optional[Dict]) -> str:
+        """Ön analiz özetini formatla"""
+        if not intel:
+            return ""
+
+        risk = intel.get("risk_ozeti", {})
+        faktorler = intel.get("risk_faktorleri", [])
+
+        faktor_str = ""
+        if faktorler:
+            faktor_lines = []
+            for f in faktorler[:5]:
+                tip = f.get("tip", "bilgi")
+                mesaj = f.get("mesaj", "")
+                icon = "!" if tip == "kritik" else ("?" if tip == "uyari" else "+")
+                faktor_lines.append(f"  [{icon}] {mesaj}")
+            faktor_str = "\n".join(faktor_lines)
+
+        return f"""
+ON ANALIZ SONUCU (Rule-Based):
+- Risk Skoru: {risk.get("risk_skoru", "?")} / 100
+- Risk Seviyesi: {risk.get("risk_seviyesi", "?").upper()}
+- Karar Onerisi: {risk.get("karar_onerisi", "?")}
+- Aciklama: {risk.get("karar_aciklamasi", "?")}
+
+Risk Faktorleri:
+{faktor_str if faktor_str else "  Onemli risk faktoru tespit edilmedi."}
+"""
 
     async def _run_phase(
         self,
@@ -251,8 +342,8 @@ class CouncilService:
             lowest = sorted_scores[0]
             highest = sorted_scores[-1]
 
-            # Tartışma sadece yeterli fark varsa
-            if highest[1] - lowest[1] >= 15:
+            # Tartışma sadece yeterli fark varsa (10 puan)
+            if highest[1] - lowest[1] >= 10:
                 # Düşük skor veren savunuyor (iyimser görüş)
                 await self._speak_in_discussion(
                     speaker_id=lowest[0],
@@ -441,34 +532,36 @@ Kısa bir özet yapın (3-4 cümle).
         }
 
     def _build_user_prompt(self, phase: Dict, context: Dict, scores: Dict) -> str:
-        """User prompt oluştur"""
+        """User prompt oluştur - formatlanmış verilerle"""
         company_name = context["company_name"]
+        formatted_data = self._format_agent_data(context)
+        intel_summary = self._format_intelligence_summary(context.get("intelligence_report"))
 
         if phase["name"] == "opening":
             return f"""
-Bugünkü toplantıda {company_name} firmasını değerlendireceğiz.
+Bugunku toplantida {company_name} firmasini degerlendirecegiz.
 
-TSG Verileri: {context.get('tsg_data', 'Veri yok')}
-İhale Verileri: {context.get('ihale_data', 'Veri yok')}
-Haber Verileri: {context.get('news_data', 'Veri yok')}
+{intel_summary}
 
-Lütfen toplantıyı açın ve gündemi belirleyin. (2-3 cümle)
+=== FIRMA VERILERI ===
+{formatted_data}
+
+Lutfen toplantiyi acin ve gundemi belirleyin. (2-3 cumle)
 """
 
         elif phase["name"].endswith("_presentation"):
             return f"""
-{company_name} firmasını değerlendiriyorsunuz.
+{company_name} firmasini degerlendiriyorsunuz.
 
-TSG Verileri: {context.get('tsg_data', 'Veri yok')}
-İhale Verileri: {context.get('ihale_data', 'Veri yok')}
-Haber Verileri: {context.get('news_data', 'Veri yok')}
+=== FIRMA VERILERI ===
+{formatted_data}
 
-Lütfen uzmanlık alanınıza göre değerlendirmenizi yapın.
-- Kısa analiz (3-4 cümle)
-- Risk skoru verin (0-100, 0=risk yok, 100=çok riskli)
-- Gerekçenizi belirtin
+Lutfen uzmanlik alaniniza gore degerlendirmenizi yapin:
+- Kisa analiz (3-4 cumle)
+- Risk skoru verin (0-100, 0=risk yok, 100=cok riskli)
+- Gerekce belirtin
 
-Format: [SKOR: XX] şeklinde skoru belirtin.
+ONEMLI: Skorunuzu [SKOR: XX] formatinda belirtin.
 """
 
         return ""

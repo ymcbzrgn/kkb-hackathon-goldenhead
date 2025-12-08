@@ -98,3 +98,47 @@ class ReportService:
             self.db.commit()
             return True
         return False
+
+    def update_agent_progress(
+        self,
+        report_id: UUID,
+        agent_id: str,
+        progress: int,
+        message: str,
+        status: str = "running"
+    ) -> Optional[Report]:
+        """Agent progress güncelle (reserved_json içinde)"""
+        report = self.get_by_id(report_id)
+        if not report:
+            return None
+
+        current_data = report.reserved_json or {}
+        agent_progresses = current_data.get("agent_progresses", {})
+
+        agent_progresses[agent_id] = {
+            "progress": progress,
+            "message": message,
+            "status": status,
+            "updated_at": datetime.utcnow().isoformat() + "Z"
+        }
+
+        current_data["agent_progresses"] = agent_progresses
+        report.reserved_json = current_data
+
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(report, "reserved_json")
+
+        self.db.commit()
+        return report
+
+    def get_live_state(self, report_id: UUID) -> Optional[dict]:
+        """Canlı durum bilgisini getir (reconnect için)"""
+        report = self.get_by_id(report_id)
+        if not report:
+            return None
+
+        return {
+            "status": report.status,
+            "phase": (report.reserved_json or {}).get("current_phase", "pending"),
+            "agent_progresses": (report.reserved_json or {}).get("agent_progresses", {})
+        }

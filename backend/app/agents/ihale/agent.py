@@ -143,8 +143,8 @@ class IhaleAgent(BaseAgent):
     # Timeout (hackathon guvenligi)
     MAX_EXECUTION_TIME = 300  # 5 dakika (90 gun tarama icin)
 
-    # Varsayilan tarama suresi
-    DEFAULT_SEARCH_DAYS = 90
+    # Varsayilan tarama suresi (Demo: 7 gun, Production: 90 gun)
+    DEFAULT_SEARCH_DAYS = 7
 
     def __init__(self):
         super().__init__(
@@ -161,7 +161,7 @@ class IhaleAgent(BaseAgent):
         company_name: str,
         vergi_no: Optional[str] = None,
         mersis_no: Optional[str] = None,
-        search_days: int = 90
+        search_days: int = 7
     ) -> AgentResult:
         """
         Ana calistirma metodu - TSG tarzi.

@@ -66,7 +66,7 @@ export interface HealthCheckResponse {
 
 // ==================== Enums ====================
 
-export type ReportStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ReportStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export type RiskLevel = 'dusuk' | 'orta_dusuk' | 'orta' | 'orta_yuksek' | 'yuksek';
 

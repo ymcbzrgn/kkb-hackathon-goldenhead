@@ -164,23 +164,33 @@ async def get_report(
     # Rapor detayı dönüş
     report_data = report.to_dict()
 
-    # Agent sonuçları ekle
+    # Agent sonuçları ekle (frontend tsg, ihale, news bekliyor - _agent suffix'i kaldır)
     if report.agent_results:
         report_data["agent_results"] = {
-            result.agent_type: result.processed_data
+            result.agent_id.replace("_agent", ""): result.data
             for result in report.agent_results
         }
 
-    # Council kararı ekle
+    # Council kararı ekle (frontend beklentilerine uygun format)
     if report.council_decision:
         report_data["council_decision"] = {
             "final_score": report.council_decision.final_score,
             "risk_level": report.council_decision.risk_level,
             "decision": report.council_decision.decision,
-            "consensus": report.council_decision.consensus,
+            "consensus": float(report.council_decision.consensus) if report.council_decision.consensus else None,
             "conditions": report.council_decision.conditions,
-            "dissent_note": report.council_decision.dissent_note,
-            "transcript": report.council_decision.transcript
+            "summary": report.council_decision.summary,
+            "dissent_note": report.council_decision.summary,  # Frontend beklentisi
+            "transcript": report.council_decision.transcript,
+            "duration_seconds": report.council_decision.duration_seconds,
+            # Scores objesi - frontend beklentisi
+            "scores": {
+                "initial": report.council_decision.initial_scores,
+                "final": report.council_decision.final_scores
+            },
+            # Ayrıca flat olarak da dön (geriye uyumluluk)
+            "initial_scores": report.council_decision.initial_scores,
+            "final_scores": report.council_decision.final_scores
         }
 
     return {
@@ -326,12 +336,12 @@ async def export_pdf(
     # 5. Agent sonuçlarını ekle
     if report.agent_results:
         for result in report.agent_results:
-            if result.agent_type:
-                report_data["agent_results"][result.agent_type] = {
+            if result.agent_id:
+                report_data["agent_results"][result.agent_id] = {
                     "summary": result.summary,
                     "key_findings": result.key_findings,
                     "warning_flags": result.warning_flags,
-                    "processed_data": result.processed_data
+                    "data": result.data
                 }
 
     # 6. Council kararını ekle
@@ -344,8 +354,8 @@ async def export_pdf(
             "initial_scores": report.council_decision.initial_scores,
             "final_scores": report.council_decision.final_scores,
             "conditions": report.council_decision.conditions,
-            "dissent_note": report.council_decision.dissent_note,
-            "decision_rationale": report.council_decision.decision_rationale
+            "summary": report.council_decision.summary,
+            "transcript": report.council_decision.transcript
         }
 
     # 7. PDF oluştur
