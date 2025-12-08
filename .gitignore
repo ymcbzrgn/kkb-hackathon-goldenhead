@@ -55,3 +55,20 @@ coverage/
 
 # Personal Claude Code config (her kişi kendi CLAUDE.md'sini kullanır)
 CLAUDE.md
+.github/copilot-instructions.md
+
+# Test & Debug Files (development only)
+test_*.py
+debug_*.py
+research_*.py
+
+# Backup files
+*.backup
+*.bak
+
+# Data directories (geçici veriler)
+data/
+
+# Duplicate files (boşluklu dosya adları)
+*\ ?.py
+*\ ?.pyc
