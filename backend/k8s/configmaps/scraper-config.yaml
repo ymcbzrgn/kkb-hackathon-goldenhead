@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scraper-config
+  namespace: news-agent
+data:
+  REDIS_URL: "redis://redis:6379"
+  BROWSER_POOL_URL: "http://browser-pool:8080"
+  LLM_GATEWAY_URL: "http://llm-gateway:8080"
+  MAX_ARTICLES_PER_SOURCE: "3"
+  SCRAPER_TIMEOUT: "60"
+  KKB_API_URL: "https://mia.csp.kloudeks.com/api/v1"

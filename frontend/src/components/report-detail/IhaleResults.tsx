@@ -88,14 +88,14 @@ export function IhaleResults({ data }: IhaleResultsProps) {
       )}
 
       {/* Geçmiş Yasaklar */}
-      {data.gecmis_yasaklar.length > 0 && (
+      {(data?.gecmis_yasaklar || []).length > 0 && (
         <Card className="p-5">
           <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
             <Gavel className="w-4 h-4 text-gray-500" />
-            Geçmiş Yasaklar ({data.gecmis_yasaklar.length})
+            Geçmiş Yasaklar ({(data?.gecmis_yasaklar || []).length})
           </h4>
           <div className="space-y-3">
-            {data.gecmis_yasaklar.map((yasak, index) => (
+            {(data?.gecmis_yasaklar || []).map((yasak, index) => (
               <YasakCard key={index} yasak={yasak} />
             ))}
           </div>
@@ -103,7 +103,7 @@ export function IhaleResults({ data }: IhaleResultsProps) {
       )}
 
       {/* Temiz Geçmiş */}
-      {!data.yasak_durumu && data.gecmis_yasaklar.length === 0 && (
+      {!data?.yasak_durumu && (data?.gecmis_yasaklar || []).length === 0 && (
         <Card className="p-5">
           <div className="text-center py-6">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">

@@ -11,6 +11,8 @@ export function useReport(id: string | undefined) {
     queryKey: ['report', id],
     queryFn: () => getReport(id!),
     enabled: !!id,
+    refetchOnMount: true,       // Her mount'ta yenile
+    refetchOnWindowFocus: true, // Sekmeye donunce yenile
     select: (response) => {
       if (response.success && response.data) {
         return response.data;

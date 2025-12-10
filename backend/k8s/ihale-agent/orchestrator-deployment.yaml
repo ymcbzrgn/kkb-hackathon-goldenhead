@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ihale-orchestrator
+  namespace: ihale-agent
+  labels:
+    app: ihale-orchestrator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ihale-orchestrator
+  template:
+    metadata:
+      labels:
+        app: ihale-orchestrator
+    spec:
+      containers:
+      - name: orchestrator
+        image: ihale-orchestrator:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: ihale-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ihale-orchestrator
+  namespace: ihale-agent
+spec:
+  selector:
+    app: ihale-orchestrator
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

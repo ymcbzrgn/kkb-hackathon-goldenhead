@@ -14,6 +14,7 @@ class Company(Base):
     """
     Firma cache tablosu.
     Daha önce sorgulanan firmaların bilgilerini saklar.
+    NOT: Bu model DB schema'sına UYGUN!
     """
     __tablename__ = "companies"
 
@@ -21,35 +22,27 @@ class Company(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Temel Bilgiler
-    name = Column(String(500), nullable=False, index=True)
+    name = Column(String(255), nullable=False, index=True)
     tax_no = Column(String(20), unique=True, index=True)
-    trade_name = Column(String(500))
+    trade_registry_no = Column(String(50))  # DB'de var
 
     # Adres
     address = Column(Text)
     city = Column(String(100))
-    district = Column(String(100))
 
     # Detaylar
     sector = Column(String(200))
-    establishment_date = Column(DateTime(timezone=True))
-    capital = Column(Integer)  # TL cinsinden
-    employee_count = Column(Integer)
 
-    # TSG Verileri (cache)
-    tsg_data = Column(JSONB, default={})
+    # Cache Verileri
+    cached_data = Column(JSONB)  # DB'de var
 
-    # Durum
-    is_active = Column(Boolean, default=True)
-    last_updated = Column(DateTime(timezone=True))
-
-    # Metadata
-    meta_data = Column("metadata", JSONB, default={})
+    # Rapor İlişkisi
+    last_report_id = Column(UUID(as_uuid=True))  # DB'de var
+    total_reports = Column(Integer)  # DB'de var
 
     # Audit Fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True))
 
     def __repr__(self):
         return f"<Company(tax_no={self.tax_no}, name={self.name})>"

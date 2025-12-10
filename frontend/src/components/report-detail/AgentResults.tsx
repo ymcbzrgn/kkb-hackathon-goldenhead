@@ -49,11 +49,13 @@ export function AgentResults({ results }: AgentResultsProps) {
   const [activeTab, setActiveTab] = useState<TabId>('tsg');
 
   const getStatus = (tabId: TabId) => {
-    return results[tabId].status;
+    const result = results?.[tabId];
+    return result?.status || 'pending';
   };
 
   const getDuration = (tabId: TabId) => {
-    const duration = results[tabId].duration_seconds;
+    const result = results?.[tabId];
+    const duration = result?.duration_seconds;
     if (!duration) return null;
     return `${duration.toFixed(1)}s`;
   };
@@ -108,24 +110,24 @@ export function AgentResults({ results }: AgentResultsProps) {
             transition={{ duration: 0.2 }}
           >
             {activeTab === 'tsg' && (
-              results.tsg.status === 'completed' && results.tsg.data ? (
+              results?.tsg?.status === 'completed' && results?.tsg?.data ? (
                 <TsgResults data={results.tsg.data} />
               ) : (
-                <EmptyAgentState status={results.tsg.status} agentName="TSG" />
+                <EmptyAgentState status={results?.tsg?.status || 'pending'} agentName="TSG" />
               )
             )}
             {activeTab === 'ihale' && (
-              results.ihale.status === 'completed' && results.ihale.data ? (
+              results?.ihale?.status === 'completed' && results?.ihale?.data ? (
                 <IhaleResults data={results.ihale.data} />
               ) : (
-                <EmptyAgentState status={results.ihale.status} agentName="İhale" />
+                <EmptyAgentState status={results?.ihale?.status || 'pending'} agentName="İhale" />
               )
             )}
             {activeTab === 'news' && (
-              results.news.status === 'completed' && results.news.data ? (
+              results?.news?.status === 'completed' && results?.news?.data ? (
                 <NewsResults data={results.news.data} />
               ) : (
-                <EmptyAgentState status={results.news.status} agentName="Haber" />
+                <EmptyAgentState status={results?.news?.status || 'pending'} agentName="Haber" />
               )
             )}
           </motion.div>

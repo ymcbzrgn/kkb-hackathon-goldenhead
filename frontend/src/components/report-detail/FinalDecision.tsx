@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { CheckCircle, XCircle, AlertTriangle, Shield } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Shield, HelpCircle } from 'lucide-react';
 import type { Decision, RiskLevel } from '@/types';
 import { RiskGauge } from './RiskGauge';
 import { ConsensusBar } from './ConsensusBar';
@@ -19,10 +19,10 @@ interface FinalDecisionProps {
   dissentNote?: string | null;
 }
 
-const decisionConfig: Record<Decision, { 
-  icon: typeof CheckCircle; 
-  label: string; 
-  color: string; 
+const decisionConfig: Record<string, {
+  icon: typeof CheckCircle;
+  label: string;
+  color: string;
   bgColor: string;
   borderColor: string;
 }> = {
@@ -56,6 +56,15 @@ const decisionConfig: Record<Decision, {
   },
 };
 
+// Default fallback for unknown decision types
+const defaultDecisionConfig = {
+  icon: HelpCircle,
+  label: 'BİLİNMİYOR',
+  color: 'text-gray-600',
+  bgColor: 'bg-gray-50',
+  borderColor: 'border-gray-200',
+};
+
 export function FinalDecision({
   decision,
   score,
@@ -64,7 +73,7 @@ export function FinalDecision({
   conditions,
   dissentNote,
 }: FinalDecisionProps) {
-  const config = decisionConfig[decision];
+  const config = decisionConfig[decision] || defaultDecisionConfig;
   const Icon = config.icon;
 
   return (

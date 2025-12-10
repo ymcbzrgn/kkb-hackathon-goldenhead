@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: browser-pool
+  namespace: news-agent
+  labels:
+    app: browser-pool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: browser-pool
+  template:
+    metadata:
+      labels:
+        app: browser-pool
+    spec:
+      containers:
+      - name: browser-pool
+        image: news-browser-pool:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: POOL_SIZE
+          value: "10"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: browser-pool
+  namespace: news-agent
+spec:
+  selector:
+    app: browser-pool
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

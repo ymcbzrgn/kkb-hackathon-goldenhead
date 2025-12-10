@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ihale-scraper
+  namespace: ihale-agent
+  labels:
+    app: ihale-scraper
+spec:
+  replicas: 1  # Rate limiting nedeniyle tek replica
+  selector:
+    matchLabels:
+      app: ihale-scraper
+  template:
+    metadata:
+      labels:
+        app: ihale-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: ihale-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: ihale-config
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "2000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30  # Playwright init suresi
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ihale-scraper
+  namespace: ihale-agent
+spec:
+  selector:
+    app: ihale-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

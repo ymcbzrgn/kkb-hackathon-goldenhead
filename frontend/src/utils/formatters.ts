@@ -1,6 +1,8 @@
 // Date formatter
-export function formatDate(dateString: string): string {
+export function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return '-';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('tr-TR', {
     day: '2-digit',
     month: '2-digit',
@@ -11,8 +13,10 @@ export function formatDate(dateString: string): string {
 }
 
 // Short date formatter
-export function formatShortDate(dateString: string): string {
+export function formatShortDate(dateString: string | null | undefined): string {
+  if (!dateString) return '-';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '-';
   return new Intl.DateTimeFormat('tr-TR', {
     day: '2-digit',
     month: '2-digit',

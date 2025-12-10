@@ -109,6 +109,9 @@ async def websocket_endpoint(websocket: WebSocket, report_id: str):
             }
         })
 
+        # Mevcut durumu gönder (reconnect state restore)
+        await _send_current_state(websocket, report_id)
+
         # Mesajları dinle (heartbeat için)
         while True:
             try:
@@ -172,3 +175,65 @@ async def send_council_speech(report_id: str, speaker_id: str, chunk: str, is_co
         payload["risk_score"] = risk_score
 
     await manager.send_event(report_id, "council_speech", payload)
+
+
+async def _send_current_state(websocket: WebSocket, report_id: str):
+    """
+    Reconnect'te mevcut durumu mevcut event formatlarında gönder.
+    Frontend değişikliği gerektirmez - standart event'leri kullanır.
+    """
+    from app.core.database import SessionLocal
+    from app.services.report_service import ReportService
+
+    try:
+        db = SessionLocal()
+        service = ReportService(db)
+        state = service.get_live_state(report_id)
+        db.close()
+
+        if not state:
+            return
+
+        # Sadece processing durumundaysa state restore yap
+        if state["status"] != "processing":
+            return
+
+        # Her agent için mevcut event'leri gönder
+        agent_progresses = state.get("agent_progresses", {})
+        for agent_id, agent_state in agent_progresses.items():
+            # agent_started event'i
+            await websocket.send_json({
+                "type": "agent_started",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "payload": {
+                    "agent_id": agent_id,
+                    "agent_name": agent_id.replace("_", " ").title(),
+                    "agent_description": "Devam ediyor..."
+                }
+            })
+
+            # agent_progress event'i
+            await websocket.send_json({
+                "type": "agent_progress",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+                "payload": {
+                    "agent_id": agent_id,
+                    "progress": agent_state.get("progress", 0),
+                    "message": agent_state.get("message", "")
+                }
+            })
+
+            # Eğer completed ise
+            if agent_state.get("status") == "completed":
+                await websocket.send_json({
+                    "type": "agent_completed",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "payload": {
+                        "agent_id": agent_id,
+                        "duration_seconds": 0,
+                        "summary": {}
+                    }
+                })
+
+    except Exception as e:
+        print(f"State restore error: {e}")

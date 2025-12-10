@@ -22,6 +22,7 @@ class AgentResult(Base):
     """
     Agent sonuçları tablosu.
     Her agent'ın topladığı verileri saklar.
+    NOT: Bu model DB schema'sına UYGUN!
     """
     __tablename__ = "agent_results"
 
@@ -31,19 +32,15 @@ class AgentResult(Base):
     # İlişki
     report_id = Column(UUID(as_uuid=True), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False)
 
-    # Agent Bilgileri
-    agent_type = Column(String(30), nullable=False)
-    agent_version = Column(String(20), default="1.0")
+    # Agent Bilgileri - DB'ye UYGUN İSİMLER
+    agent_id = Column(String(50), nullable=False)  # tsg_agent, ihale_agent, news_agent
+    agent_name = Column(String(100))  # TSG Agent, İhale Agent, News Agent
 
     # Durum
     status = Column(String(20), nullable=False, default="pending")
-    status_message = Column(Text)
-    progress = Column(Integer, default=0)
-    retry_count = Column(Integer, default=0)
 
-    # Veriler
-    raw_data = Column(JSONB)  # Ham scrape verisi
-    processed_data = Column(JSONB)  # İşlenmiş veri
+    # Veriler - TEK KOLON (DB'de 'data' olarak)
+    data = Column(JSONB)
 
     # Özet
     summary = Column(Text)
@@ -55,29 +52,24 @@ class AgentResult(Base):
     completed_at = Column(DateTime(timezone=True))
     duration_seconds = Column(Integer)
 
-    # Kaynak Bilgileri
-    source_urls = Column(JSONB, default=[])
-    source_count = Column(Integer)
-
-    # Metadata
-    meta_data = Column("metadata", JSONB, default={})
+    # Error (DB'de var)
+    error_message = Column(Text)
 
     # Audit Fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True))
 
     # Relationship
     report = relationship("Report", back_populates="agent_results")
 
     def __repr__(self):
-        return f"<AgentResult(report_id={self.report_id}, agent={self.agent_type}, status={self.status})>"
+        return f"<AgentResult(report_id={self.report_id}, agent={self.agent_id}, status={self.status})>"
 
 
 class CouncilDecision(Base):
     """
     Komite kararları tablosu.
     6 kişilik komite toplantısının sonuçlarını saklar.
+    NOT: Bu model DB schema'sına UYGUN!
     """
     __tablename__ = "council_decisions"
 
@@ -91,39 +83,26 @@ class CouncilDecision(Base):
     final_score = Column(Integer, nullable=False)
     risk_level = Column(String(20), nullable=False)
     decision = Column(String(30), nullable=False)
-    consensus = Column(Float)  # 0.00 - 1.00
-    score_variance = Column(Float)
-
-    # Bireysel Skorlar
-    initial_scores = Column(JSONB, nullable=False)
-    final_scores = Column(JSONB, nullable=False)
-
-    # Revizyon Bilgileri
-    revisions = Column(JSONB, default=[])
+    consensus = Column(Float)  # 0.00 - 1.00 (numeric in DB)
 
     # Karar Detayları
     conditions = Column(JSONB, default=[])
-    dissent_note = Column(Text)
-    decision_rationale = Column(Text)
+    summary = Column(Text)  # DB'de var
+
+    # Bireysel Skorlar
+    initial_scores = Column(JSONB)
+    final_scores = Column(JSONB)
 
     # Transcript
-    transcript = Column(JSONB, nullable=False)
+    transcript = Column(JSONB)
 
     # Süre
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
     duration_seconds = Column(Integer)
 
-    # Faz Bilgileri
-    phases_completed = Column(JSONB, default={})
-
-    # Metadata
-    meta_data = Column("metadata", JSONB, default={})
-
     # Audit Fields
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    deleted_at = Column(DateTime(timezone=True))
 
     # Relationship
     report = relationship("Report", back_populates="council_decision")
