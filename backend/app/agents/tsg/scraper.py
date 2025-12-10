@@ -1219,12 +1219,13 @@ class TSGScraper:
             log("PDF linki bulundu, tiklanıyor...")
 
             # 3. Tikla ve popup bekle
+            # v8.1 BUG FIX: Popup timeout 15s -> 30s (yavaş ağlarda fail oluyordu)
             try:
-                async with self.page.context.expect_page(timeout=15000) as popup_info:
+                async with self.page.context.expect_page(timeout=30000) as popup_info:
                     await pdf_link.click()
 
                 popup = await popup_info.value
-                await popup.wait_for_load_state("networkidle", timeout=20000)
+                await popup.wait_for_load_state("networkidle", timeout=30000)
                 log("Popup acildi!")
 
                 # Debug screenshot

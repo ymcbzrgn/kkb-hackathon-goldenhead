@@ -5,7 +5,7 @@ Rapor iş mantığı
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.report import Report, ReportStatus
 
@@ -60,9 +60,9 @@ class ReportService:
             if message:
                 report.status_message = message
             if status == ReportStatus.PROCESSING.value:
-                report.started_at = datetime.utcnow()
+                report.started_at = datetime.now(timezone.utc)
             elif status == ReportStatus.COMPLETED.value:
-                report.completed_at = datetime.utcnow()
+                report.completed_at = datetime.now(timezone.utc)
                 if report.started_at:
                     report.duration_seconds = int((report.completed_at - report.started_at).total_seconds())
             self.db.commit()
@@ -94,7 +94,51 @@ class ReportService:
         if report:
             if report.status == ReportStatus.PROCESSING.value:
                 raise ValueError("İşlemi devam eden rapor silinemez")
-            report.deleted_at = datetime.utcnow()
+            report.deleted_at = datetime.now(timezone.utc)
             self.db.commit()
             return True
         return False
+
+    def update_agent_progress(
+        self,
+        report_id: UUID,
+        agent_id: str,
+        progress: int,
+        message: str,
+        status: str = "running"
+    ) -> Optional[Report]:
+        """Agent progress güncelle (reserved_json içinde)"""
+        report = self.get_by_id(report_id)
+        if not report:
+            return None
+
+        current_data = report.reserved_json or {}
+        agent_progresses = current_data.get("agent_progresses", {})
+
+        agent_progresses[agent_id] = {
+            "progress": progress,
+            "message": message,
+            "status": status,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+
+        current_data["agent_progresses"] = agent_progresses
+        report.reserved_json = current_data
+
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(report, "reserved_json")
+
+        self.db.commit()
+        return report
+
+    def get_live_state(self, report_id: UUID) -> Optional[dict]:
+        """Canlı durum bilgisini getir (reconnect için)"""
+        report = self.get_by_id(report_id)
+        if not report:
+            return None
+
+        return {
+            "status": report.status,
+            "phase": (report.reserved_json or {}).get("current_phase", "pending"),
+            "agent_progresses": (report.reserved_json or {}).get("agent_progresses", {})
+        }

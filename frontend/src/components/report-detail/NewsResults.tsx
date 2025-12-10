@@ -4,15 +4,16 @@
  */
 
 import { motion } from 'framer-motion';
-import { 
-  Newspaper, 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
+import {
+  Newspaper,
+  TrendingUp,
+  TrendingDown,
+  Minus,
   ExternalLink,
   ThumbsUp,
   ThumbsDown,
-  Circle
+  Circle,
+  HelpCircle
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import type { NewsData, HaberItem } from '@/types';
@@ -22,20 +23,26 @@ interface NewsResultsProps {
   data: NewsData;
 }
 
-const trendConfig = {
+const trendConfig: Record<string, { icon: typeof TrendingUp; label: string; color: string; bg: string }> = {
   yukari: { icon: TrendingUp, label: 'Yükselen', color: 'text-green-600', bg: 'bg-green-100' },
   asagi: { icon: TrendingDown, label: 'Düşen', color: 'text-red-600', bg: 'bg-red-100' },
   stabil: { icon: Minus, label: 'Stabil', color: 'text-gray-600', bg: 'bg-gray-100' },
 };
 
-const sentimentConfig = {
+// Default fallback for unknown trend
+const defaultTrendConfig = { icon: Minus, label: 'Bilinmiyor', color: 'text-gray-600', bg: 'bg-gray-100' };
+
+const sentimentConfig: Record<string, { icon: typeof ThumbsUp; color: string; bg: string; border: string }> = {
   pozitif: { icon: ThumbsUp, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200' },
   negatif: { icon: ThumbsDown, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
   notr: { icon: Circle, color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200' },
 };
 
+// Default fallback for unknown sentiment
+const defaultSentimentConfig = { icon: HelpCircle, color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200' };
+
 function NewsCard({ haber }: { haber: HaberItem }) {
-  const config = sentimentConfig[haber.sentiment];
+  const config = sentimentConfig[haber?.sentiment] || defaultSentimentConfig;
   const Icon = config.icon;
 
   return (
@@ -67,8 +74,9 @@ function NewsCard({ haber }: { haber: HaberItem }) {
 }
 
 export function NewsResults({ data }: NewsResultsProps) {
-  const TrendIcon = trendConfig[data.trend].icon;
-  const sentimentPercentage = Math.round(((data.sentiment_score + 1) / 2) * 100);
+  const trend = trendConfig[data?.trend] || defaultTrendConfig;
+  const TrendIcon = trend.icon;
+  const sentimentPercentage = Math.round(((data?.sentiment_score ?? 0) + 1) / 2 * 100);
 
   return (
     <div className="space-y-6">
@@ -119,12 +127,12 @@ export function NewsResults({ data }: NewsResultsProps) {
           </div>
 
           {/* Trend */}
-          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg ${trendConfig[data.trend].bg}`}>
-            <TrendIcon className={`w-6 h-6 ${trendConfig[data.trend].color}`} />
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-lg ${trend.bg}`}>
+            <TrendIcon className={`w-6 h-6 ${trend.color}`} />
             <div>
               <span className="text-xs text-gray-500 block">Trend</span>
-              <span className={`font-semibold ${trendConfig[data.trend].color}`}>
-                {trendConfig[data.trend].label}
+              <span className={`font-semibold ${trend.color}`}>
+                {trend.label}
               </span>
             </div>
           </div>
@@ -132,14 +140,14 @@ export function NewsResults({ data }: NewsResultsProps) {
       </Card>
 
       {/* Önemli Haberler */}
-      {data.onemli_haberler.length > 0 && (
+      {(data?.onemli_haberler || []).length > 0 && (
         <Card className="p-5">
           <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
             <Newspaper className="w-4 h-4 text-kkb-600" />
-            Önemli Haberler ({data.onemli_haberler.length})
+            Önemli Haberler ({(data?.onemli_haberler || []).length})
           </h4>
           <div className="space-y-3">
-            {data.onemli_haberler.map((haber, index) => (
+            {(data?.onemli_haberler || []).map((haber, index) => (
               <NewsCard key={index} haber={haber} />
             ))}
           </div>

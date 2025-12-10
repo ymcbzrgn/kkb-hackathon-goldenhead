@@ -1,0 +1,702 @@
+# All 10 Scraper Deployments - Universal Scraper Image with SCRAPER_TYPE env
+# Each deployment uses the same image but different SCRAPER_TYPE
+---
+# AA Scraper (Anadolu Ajansi)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aa-scraper
+  namespace: news-agent
+  labels:
+    app: aa-scraper
+    scraper-type: aa
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aa-scraper
+  template:
+    metadata:
+      labels:
+        app: aa-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "aa"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aa-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: aa-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# TRT Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trt-scraper
+  namespace: news-agent
+  labels:
+    app: trt-scraper
+    scraper-type: trt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trt-scraper
+  template:
+    metadata:
+      labels:
+        app: trt-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "trt"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trt-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: trt-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# Hurriyet Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hurriyet-scraper
+  namespace: news-agent
+  labels:
+    app: hurriyet-scraper
+    scraper-type: hurriyet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hurriyet-scraper
+  template:
+    metadata:
+      labels:
+        app: hurriyet-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "hurriyet"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hurriyet-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: hurriyet-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# Milliyet Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: milliyet-scraper
+  namespace: news-agent
+  labels:
+    app: milliyet-scraper
+    scraper-type: milliyet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: milliyet-scraper
+  template:
+    metadata:
+      labels:
+        app: milliyet-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "milliyet"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: milliyet-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: milliyet-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# CNN Turk Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cnnturk-scraper
+  namespace: news-agent
+  labels:
+    app: cnnturk-scraper
+    scraper-type: cnnturk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cnnturk-scraper
+  template:
+    metadata:
+      labels:
+        app: cnnturk-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "cnnturk"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cnnturk-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: cnnturk-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# Dunya Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dunya-scraper
+  namespace: news-agent
+  labels:
+    app: dunya-scraper
+    scraper-type: dunya
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dunya-scraper
+  template:
+    metadata:
+      labels:
+        app: dunya-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "dunya"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dunya-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: dunya-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# Ekonomim Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ekonomim-scraper
+  namespace: news-agent
+  labels:
+    app: ekonomim-scraper
+    scraper-type: ekonomim
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ekonomim-scraper
+  template:
+    metadata:
+      labels:
+        app: ekonomim-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "ekonomim"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ekonomim-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: ekonomim-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# Bigpara Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bigpara-scraper
+  namespace: news-agent
+  labels:
+    app: bigpara-scraper
+    scraper-type: bigpara
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bigpara-scraper
+  template:
+    metadata:
+      labels:
+        app: bigpara-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "bigpara"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bigpara-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: bigpara-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# NTV Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ntv-scraper
+  namespace: news-agent
+  labels:
+    app: ntv-scraper
+    scraper-type: ntv
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ntv-scraper
+  template:
+    metadata:
+      labels:
+        app: ntv-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "ntv"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ntv-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: ntv-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+# Sozcu Scraper
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sozcu-scraper
+  namespace: news-agent
+  labels:
+    app: sozcu-scraper
+    scraper-type: sozcu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sozcu-scraper
+  template:
+    metadata:
+      labels:
+        app: sozcu-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "sozcu"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sozcu-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: sozcu-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080

@@ -28,14 +28,12 @@ async def search_companies(
     - q: Arama sorgusu (min 2 karakter)
     - limit: Maksimum sonuç sayısı (default: 10, max: 20)
     """
-    # Database'den arama
+    # Database'den arama (is_active ve deleted_at DB'de yok)
     companies = db.query(Company).filter(
         or_(
             Company.name.ilike(f"%{q}%"),
             Company.tax_no.ilike(f"%{q}%")
-        ),
-        Company.deleted_at.is_(None),
-        Company.is_active == True
+        )
     ).limit(limit).all()
 
     results = [
@@ -67,10 +65,9 @@ async def get_company_by_tax_no(
     Vergi numarasına göre firma bilgisi getirir.
     Daha önce rapor oluşturulmuş firmalar için geçmiş veriler döner.
     """
-    # Firma bilgisi
+    # Firma bilgisi (deleted_at DB'de yok)
     company = db.query(Company).filter(
-        Company.tax_no == tax_no,
-        Company.deleted_at.is_(None)
+        Company.tax_no == tax_no
     ).first()
 
     if not company:

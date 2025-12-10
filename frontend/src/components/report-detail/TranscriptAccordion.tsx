@@ -24,19 +24,34 @@ const councilPhotos: Record<CouncilMemberId, string> = {
   moderator: '/council/moderator.png',
 };
 
-const phaseLabels: Record<CouncilPhase, string> = {
+// Backend'den gelen tüm phase değerlerini destekle
+const phaseLabels: Record<string, string> = {
   opening: 'Açılış',
   presentation: 'Sunum',
+  risk_presentation: 'Risk Değerlendirmesi',
+  business_presentation: 'İş Potansiyeli',
+  legal_presentation: 'Hukuki Değerlendirme',
+  media_presentation: 'Medya Analizi',
+  sector_presentation: 'Sektör Değerlendirmesi',
   discussion: 'Tartışma',
   decision: 'Karar',
 };
 
-const phaseColors: Record<CouncilPhase, { bg: string; text: string; border: string }> = {
+// Backend'den gelen tüm phase değerlerini destekle
+const phaseColors: Record<string, { bg: string; text: string; border: string }> = {
   opening: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
   presentation: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  risk_presentation: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+  business_presentation: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' },
+  legal_presentation: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+  media_presentation: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+  sector_presentation: { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
   discussion: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
   decision: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
 };
+
+// Default renk (bilinmeyen phase için)
+const defaultPhaseColor = { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
 
 // Group transcript entries by phase
 function groupByPhase(transcript: TranscriptEntry[]) {
@@ -103,18 +118,20 @@ function TranscriptEntryItem({ entry }: { entry: TranscriptEntry }) {
   );
 }
 
-function PhaseSection({ 
-  phase, 
-  entries, 
-  isOpen, 
-  onToggle 
-}: { 
-  phase: CouncilPhase; 
-  entries: TranscriptEntry[]; 
-  isOpen: boolean; 
+function PhaseSection({
+  phase,
+  entries,
+  isOpen,
+  onToggle
+}: {
+  phase: CouncilPhase;
+  entries: TranscriptEntry[];
+  isOpen: boolean;
   onToggle: () => void;
 }) {
-  const colors = phaseColors[phase];
+  // Bilinmeyen phase için default renk kullan
+  const colors = phaseColors[phase] || defaultPhaseColor;
+  const label = phaseLabels[phase] || phase;
 
   return (
     <div className={`border rounded-lg overflow-hidden ${colors.border}`}>
@@ -125,7 +142,7 @@ function PhaseSection({
         <div className="flex items-center gap-3">
           <MessageSquare className={`w-4 h-4 ${colors.text}`} />
           <span className={`font-semibold ${colors.text}`}>
-            {phaseLabels[phase]}
+            {label}
           </span>
           <span className="text-xs text-gray-500">
             ({entries.length} konuşma)
@@ -178,7 +195,7 @@ export function TranscriptAccordion({ transcript }: TranscriptAccordionProps) {
     });
   };
 
-  if (transcript.length === 0) {
+  if (!transcript || transcript.length === 0) {
     return (
       <Card className="p-8 text-center">
         <MessageSquare className="w-12 h-12 text-gray-300 mx-auto mb-4" />

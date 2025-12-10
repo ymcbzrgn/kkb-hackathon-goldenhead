@@ -15,8 +15,29 @@ from app.core.config import settings
 async def lifespan(app: FastAPI):
     # Startup
     print("[INFO] Firma Istihbarat API baslatiliyor...")
+
+    # Redis PubSub listener başlat (Celery → WebSocket köprüsü)
+    from app.services.redis_pubsub import pubsub_service
+    from app.api.websocket import manager as ws_manager
+
+    async def handle_redis_message(report_id: str, event_type: str, payload: dict):
+        """Redis'ten gelen mesajı WebSocket'e ilet."""
+        await ws_manager.send_event(report_id, event_type, payload)
+
+    try:
+        await pubsub_service.start_listener(handle_redis_message)
+        print("[INFO] Redis PubSub listener başlatıldı")
+    except Exception as e:
+        print(f"[WARN] Redis PubSub başlatılamadı: {e}")
+
     yield
+
     # Shutdown
+    try:
+        await pubsub_service.stop_listener()
+    except Exception as e:
+        print(f"[WARN] Redis PubSub durdurma hatası: {e}")
+
     print("[INFO] Firma Istihbarat API kapatiliyor...")
 
 

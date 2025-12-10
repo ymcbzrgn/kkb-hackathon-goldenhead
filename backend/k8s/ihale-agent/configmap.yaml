@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ihale-config
+  namespace: ihale-agent
+data:
+  # Service URLs (K8s internal DNS)
+  SCRAPER_URL: "http://ihale-scraper:8080"
+  OCR_URL: "http://ihale-ocr:8080"
+  LLM_GATEWAY_URL: "http://llm-gateway.news-agent:8080"
+  REDIS_URL: "redis://redis:6379"
+
+  # Timeouts
+  GLOBAL_TIMEOUT: "600"
+  SCRAPER_TIMEOUT: "300"
+  OCR_TIMEOUT: "60"
+
+  # Scraper config
+  MAX_DAYS: "90"
+  REQUEST_DELAY: "1.5"
+  PAGE_TIMEOUT: "30000"
+
+  # OCR config
+  OCR_DPI: "300"
+  MIN_TEXT_THRESHOLD: "200"
+  MAX_WORKERS: "4"

@@ -1,12 +1,12 @@
 # MVP Plan - KKB Firma İstihbarat Sistemi
 
 > **Teslim Tarihi:** 4 Gün Sonra
-> **Son Güncelleme:** 6 Aralık 2024
+> **Son Güncelleme:** 8 Aralık 2024
 > **PM:** Yamaç
 
 ---
 
-## Mevcut Durum (6 Aralık 2024)
+## Mevcut Durum (7 Aralık 2024)
 
 ### Tamamlanan İşler
 
@@ -19,9 +19,9 @@
 | **Docker Setup** | ✅ %100 | PostgreSQL, Redis, Qdrant, pgAdmin çalışıyor |
 | **Database Schema** | ✅ %100 | Tüm tablolar ve indexler oluşturuldu |
 | **WebSocket** | ✅ %100 | Temel bağlantı çalışıyor |
-| **Agent Yapısı** | ✅ %60 | Base agent, orchestrator iskelet hazır |
-| **Council Yapısı** | ✅ %70 | Personas, prompts, service iskelet hazır |
-| **LLM Client** | ✅ %80 | Client, streaming, vision, embedding hazır |
+| **Agent Yapısı** | ✅ %100 | TSG Agent %100, İhale Agent %100, News Agent %100, Orchestrator %100 |
+| **Council Yapısı** | ✅ %100 | 8 aşamalı toplantı, streaming TAM |
+| **LLM Client** | ✅ %100 | Client, streaming, embedding TAM |
 
 ### Eksik/TODO Listesi
 
@@ -33,10 +33,10 @@ Backend (Bartın):
 └── Celery tasks    → Background job (1 TODO)
 
 AI/ML (Yamaç):
-├── tsg_agent.py    → TSG scraping + Vision (3 TODO)
-├── ihale_agent.py  → EKAP scraping (1 TODO)
-├── news_agent.py   → Haber + Sentiment (2 TODO)
-└── council_service → Tam implementasyon
+├── tsg_agent.py    → ✅ TAMAMLANDI (OCR + CAPTCHA + PDF gen)
+├── ihale_agent.py  → ✅ TAMAMLANDI (Resmi Gazete OCR + 90° rotasyon)
+├── news_agent.py   → ✅ TAMAMLANDI (10 kaynak, paralel scraping, sentiment)
+└── council_service → ✅ TAMAMLANDI (8 aşama, streaming)
 ```
 
 ---
@@ -53,9 +53,9 @@ AI/ML (Yamaç):
 
 | Özellik | Açıklama | Owner | Öncelik |
 |---------|----------|-------|---------|
-| **TSG Agent** | TSG'den GERÇEK veri çekme (Playwright + Vision) | Yamaç | **P0** |
-| **İhale Agent** | EKAP'tan GERÇEK yasak kontrolü | Yamaç | **P0** |
-| **News Agent** | GERÇEK haber toplama + sentiment analizi | Yamaç | **P0** |
+| **TSG Agent** | ✅ TSG'den GERÇEK veri çekme (Playwright + OCR) | Yamaç | **P0** |
+| **İhale Agent** | ✅ Resmi Gazete'den GERÇEK yasak kontrolü (OCR) | Yamaç | **P0** |
+| **News Agent** | ✅ GERÇEK haber toplama + sentiment analizi (10 kaynak) | Yamaç | **P0** |
 | **Rapor Üretimi** | Agent verilerinden kapsamlı rapor | Yamaç | **P0** |
 | Rapor oluşturma | Yeni rapor başlatma + DB kayıt | Bartın | P1 |
 | Rapor listeleme | Tüm raporları görme | Bartın | P1 |
@@ -68,8 +68,8 @@ AI/ML (Yamaç):
 
 | Özellik | Açıklama | Öncelik |
 |---------|----------|---------|
-| **Council Toplantısı** | 6 kişilik AI komite (BONUS!) | Orta |
-| Council Streaming | Canlı konuşma gösterimi | Orta |
+| ~~Council Toplantısı~~ | ~~6 kişilik AI komite~~ | ✅ **TAMAMLANDI!** |
+| ~~Council Streaming~~ | ~~Canlı konuşma gösterimi~~ | ✅ **TAMAMLANDI!** |
 | PDF Export | Rapor PDF indirme | Düşük |
 | Qdrant RAG | Geçmiş raporlardan öğrenme | Düşük |
 | Skor Revizyonu | Tartışma sonrası skor değişimi | Düşük |
@@ -99,9 +99,9 @@ AI/ML (Yamaç):
 | **Bekir** | Agent progress UI | İlerleme çubukları görünür |
 
 #### Gün Sonu Milestone
-- [ ] TSG Agent GERÇEK veri çekiyor
-- [ ] İhale Agent GERÇEK yasak kontrolü yapıyor
-- [ ] Rapor DB'ye kaydediliyor
+- [x] TSG Agent GERÇEK veri çekiyor ✅
+- [x] İhale Agent GERÇEK yasak kontrolü yapıyor ✅ (Resmi Gazete OCR)
+- [x] Rapor DB'ye kaydediliyor ✅
 
 ---
 
@@ -128,10 +128,10 @@ AI/ML (Yamaç):
 | **Bekir** | Rapor detay sayfası UI | Güzel rapor görünümü |
 
 #### Gün Sonu Milestone
-- [ ] **3 Agent GERÇEK veri topluyor**
+- [x] **3 Agent GERÇEK veri topluyor** ✅
 - [ ] **LLM ile rapor üretiliyor**
 - [ ] **Risk skoru hesaplanıyor**
-- [ ] End-to-end akış çalışıyor
+- [x] End-to-end akış çalışıyor ✅
 
 ---
 
@@ -300,10 +300,10 @@ dev/yamac     → AI/ML development
 
 ### KRİTİK (Hackathon Jüri Beklentisi)
 
-- [ ] **TSG Agent GERÇEK veri çekiyor** (firma kuruluş, sermaye, ortaklar)
-- [ ] **İhale Agent GERÇEK yasak kontrolü yapıyor** (EKAP)
-- [ ] **News Agent GERÇEK haber topluyor** (son 6 ay)
-- [ ] **LLM ile sentiment analizi yapılıyor**
+- [x] **TSG Agent GERÇEK veri çekiyor** (firma kuruluş, sermaye, ortaklar) ✅
+- [x] **İhale Agent GERÇEK yasak kontrolü yapıyor** (Resmi Gazete OCR) ✅
+- [x] **News Agent GERÇEK haber topluyor** (10 kaynak, son 12 ay) ✅
+- [x] **LLM ile sentiment analizi yapılıyor** ✅
 - [ ] **LLM ile kapsamlı rapor üretiliyor**
 - [ ] **Risk skoru hesaplanıyor** (0-100)
 - [ ] **Karar önerisi veriliyor** (Onay/Şartlı/Red/İnceleme)
@@ -361,19 +361,33 @@ dev/yamac     → AI/ML development
 | 00:51 | Yamaç | Monorepo yapısı tamamlandı | ✅ |
 | 00:51 | Yamaç | E2E testleri geçti | ✅ |
 | 00:51 | Yamaç | MVP_PLAN.md oluşturuldu | ✅ |
-| | | | |
+| 23:00 | Yamaç | TSG Agent v9.3 tamamlandı (OCR + 1,312+ satır) | ✅ |
+| 23:00 | Yamaç | CAPTCHA çözümü eklendi (Tesseract OCR) | ✅ |
+| 23:00 | Yamaç | PDF generator eklendi | ✅ |
+| 23:00 | Yamaç | Council Service %100 tamamlandı (533 satır) | ✅ |
+| 23:00 | Yamaç | LLM Client %100 tamamlandı | ✅ |
 
 ### 7 Aralık (Gün 2)
 
 | Saat | Kişi | Yapılan İş | Durum |
 |------|------|------------|-------|
-| | | | |
+| 22:00 | Yamaç | İhale Agent - Resmi Gazete scraping | ✅ |
+| 22:00 | Yamaç | PyMuPDF kaldırıldı → Her zaman Tesseract OCR | ✅ |
+| 22:00 | Yamaç | 90° sayfa rotasyonu eklendi | ✅ |
+| 22:00 | Yamaç | 9 alan + Resmi Gazete metadata çıkarma | ✅ |
+| 22:30 | Yamaç | E2E Test: NEV BAHAR GIDA (Vergi: 6310) başarılı | ✅ |
 
 ### 8 Aralık (Gün 3)
 
 | Saat | Kişi | Yapılan İş | Durum |
 |------|------|------------|-------|
-| | | | |
+| 19:00 | Yamaç | News Agent - 10 güvenilir kaynak implementasyonu | ✅ |
+| 19:00 | Yamaç | Paralel scraping (10 kaynak aynı anda) | ✅ |
+| 19:00 | Yamaç | LLM sentiment analizi (olumlu/olumsuz/nötr) | ✅ |
+| 19:00 | Yamaç | Her haber için JPEG screenshot | ✅ |
+| 19:15 | Yamaç | Backend dosya temizliği (~38 MB) | ✅ |
+| 19:15 | Yamaç | .gitignore güncelleme | ✅ |
+| 19:20 | Yamaç | MVP_PLAN.md güncelleme | ✅ |
 
 ### 9 Aralık (Gün 4 - TESLİM)
 
@@ -383,20 +397,20 @@ dev/yamac     → AI/ML development
 
 ---
 
-## Mevcut Kod Analizi (6 Aralık Güncellemesi)
+## Mevcut Kod Analizi (7 Aralık Güncellemesi)
 
 ### Genel Durum Tablosu
 
 | Bileşen | Durum | Açıklama |
 |---------|-------|----------|
-| **LLM Client** | ✅ 100% | Streaming, Vision, Embedding TAM |
-| **Council Service** | ✅ 95% | 8 aşamalı toplantı, prompts TAM |
+| **LLM Client** | ✅ 100% | Streaming, Embedding TAM |
+| **Council Service** | ✅ 100% | 8 aşamalı toplantı, streaming TAM |
 | **Orchestrator** | ✅ 100% | Paralel agent yönetimi TAM |
 | **Base Agent** | ✅ 100% | Progress tracking TAM |
 | **WebSocket** | ✅ 100% | Event'ler, heartbeat TAM |
-| **TSG Agent** | ⚠️ 40% | **3 TODO - Scraping MOCK** |
-| **İhale Agent** | ⚠️ 50% | **1 TODO - EKAP MOCK** |
-| **News Agent** | ⚠️ 50% | **2 TODO - Scraping MOCK** |
+| **TSG Agent** | ✅ 100% | **Tesseract OCR, CAPTCHA, PDF gen TAM** |
+| **İhale Agent** | ✅ 100% | **Resmi Gazete OCR + 90° rotasyon TAM** |
+| **News Agent** | ✅ 100% | **10 kaynak, paralel scraping, sentiment, screenshot TAM** |
 | **Reports API** | ⚠️ 60% | Schema OK, DB ops TODO |
 
 ---
@@ -409,88 +423,93 @@ dev/yamac     → AI/ML development
 
 #### GÜN 1: Agent Implementasyonları
 
-**GÖREV 1.1: TSG Agent - Web Scraping**
+**GÖREV 1.1: TSG Agent - Web Scraping** ✅ TAMAMLANDI
 ```
-Dosya: backend/app/agents/tsg_agent.py (Satır 77)
-Süre: 3-4 saat
+Dosya: backend/app/agents/tsg/scraper.py (1,357 satır)
+Durum: TAMAMLANDI
 
-Yapılacaklar:
-1. [ ] Playwright ile https://www.ticaretsicil.gov.tr aç
-2. [ ] Firma adını arama kutusuna yaz
-3. [ ] Sonuç listesinden ilgili kayıtları bul
-4. [ ] PDF linklerini topla
+Yapılanlar:
+1. [x] Playwright ile TSG sitesine bağlantı
+2. [x] CAPTCHA çözümü (Tesseract OCR)
+3. [x] Firma arama + şehir filtresi
+4. [x] Multi-PDF indirme stratejisi (YÖNETIM → KURULUS → SERMAYE)
+5. [x] Gazete sayfası screenshot
 
-Kabul Kriterleri:
-- [ ] Arama sonuç döndürüyor
-- [ ] PDF linkleri liste olarak dönüyor
-- [ ] Timeout handling var (30 saniye)
-- [ ] Firma bulunamazsa graceful error
-
-Fallback: Mock data ile devam et (zaten var)
+Çıktı: 8 zorunlu alan (Firma Unvanı, Tescil Konusu, Mersis No, vb.)
 ```
 
-**GÖREV 1.2: TSG Agent - PDF Vision**
+**GÖREV 1.2: TSG Agent - PDF OCR** ✅ TAMAMLANDI
 ```
-Dosya: backend/app/agents/tsg_agent.py (Satır 91)
-Süre: 2-3 saat
-Bağımlılık: GÖREV 1.1
+Dosya: backend/app/agents/tsg/agent.py (1,312 satır)
+Durum: TAMAMLANDI
 
-Yapılacaklar:
-1. [ ] PDF'leri indir (httpx ile)
-2. [ ] Base64'e çevir
-3. [ ] LLMClient.vision_pdf() ile oku
-4. [ ] Structured data çıkar
+Yapılanlar:
+1. [x] Tesseract OCR entegrasyonu
+2. [x] PDF okuma (HER ZAMAN OCR!)
+3. [x] Structured JSON çıkarma
+4. [x] PDF generator (profesyonel gazete sayfası)
+5. [x] 5 dakika time limit (hackathon güvenliği)
 
-Kabul Kriterleri:
-- [ ] Vision API çağrısı başarılı
-- [ ] JSON formatında veri dönüyor
-- [ ] Hata durumunda boş data (crash yok)
+Modül: backend/app/agents/tsg/ (7 dosya, 4,000+ satır)
 ```
 
-**GÖREV 1.3: İhale Agent - EKAP Scraping**
+**GÖREV 1.3: İhale Agent - Resmi Gazete Scraping** ✅ TAMAMLANDI
 ```
-Dosya: backend/app/agents/ihale_agent.py (Satır 60)
-Süre: 2 saat
+Modül: backend/app/agents/ihale/ (6 dosya)
+Durum: %100 TAMAMLANDI
 
-Yapılacaklar:
-1. [ ] EKAP yasaklı listesi arama
-2. [ ] Yasaklı durumunu kontrol et
-3. [ ] Yasak varsa detayları çek
+Yapılanlar:
+1. [x] ihale/logger.py - TSG'den kopyalandı
+2. [x] ihale/scraper.py - Playwright ile Resmi Gazete scraping
+3. [x] ihale/pdf_reader.py - Tesseract OCR + 90° rotasyon
+4. [x] ihale/company_matcher.py - LLM firma eşleştirme (temp=0.0)
+5. [x] ihale/agent.py - System + User prompt ayrımı
 
-Kabul Kriterleri:
-- [ ] yasak_durumu: True/False döndürüyor
-- [ ] Timeout handling var
+PDF Okuma Stratejisi:
+- HER ZAMAN Tesseract OCR kullan (PyMuPDF YOK!)
+- Yatay sayfalar için 0/90/180/270° rotasyon dene
+- 9 alan + Resmi Gazete metadata çıkar
 
-Not: EKAP erişimi zorsa → manuel checkbox
-```
-
-**GÖREV 1.4: News Agent - Haber Scraping**
-```
-Dosya: backend/app/agents/news_agent.py (Satır 77)
-Süre: 2-3 saat
-
-Yapılacaklar:
-1. [ ] Google News veya haber sitesi scraping
-2. [ ] Son 12 ayın haberlerini topla
-3. [ ] Başlık, kaynak, tarih, URL çek
-
-Kabul Kriterleri:
-- [ ] Minimum 5 haber döndürüyor
-- [ ] Rate limiting var
+Kaynak: https://www.resmigazete.gov.tr → Çeşitli İlanlar
+Test: NEV BAHAR GIDA (Vergi No: 6310) başarılı ✅
 ```
 
-**GÖREV 1.5: News Agent - LLM Sentiment**
+**GÖREV 1.4: News Agent - Haber Scraping** ✅ TAMAMLANDI
 ```
-Dosya: backend/app/agents/news_agent.py (Satır 111)
-Süre: 1-2 saat
+Modül: backend/app/agents/news/ (12 dosya)
+Durum: %100 TAMAMLANDI
 
-Yapılacaklar:
-1. [ ] LLMClient.analyze_sentiment() kullan
-2. [ ] Her haber için pozitif/negatif/nötr belirle
+Yapılanlar:
+1. [x] 10 güvenilir kaynak scraper implementasyonu
+2. [x] Paralel scraping (10 kaynak aynı anda)
+3. [x] Her kaynak için özel URL pattern
+4. [x] Her haber için JPEG screenshot
+5. [x] Akıllı OCR fallback (devlet kaynakları için)
 
-Kabul Kriterleri:
-- [ ] LLM sentiment skoru 0.0-1.0 arası
-- [ ] Açıklama dönüyor
+10 Kaynak:
+- Devlet: Anadolu Ajansı, TRT Haber
+- Demirören: Hürriyet, Milliyet, CNN Türk
+- Ekonomi: Dünya Gazetesi, Ekonomim, Bigpara
+- Diğer: NTV, Sözcü
+
+Kabul Kriterleri: ✅ TAMAMLANDI
+- [x] 10/10 kaynak çalışıyor
+- [x] Minimum 20 haber döndürüyor
+```
+
+**GÖREV 1.5: News Agent - LLM Sentiment** ✅ TAMAMLANDI
+```
+Dosya: backend/app/agents/news/extraction.py
+Durum: %100 TAMAMLANDI
+
+Yapılanlar:
+1. [x] LLM ile sentiment analizi (olumlu/olumsuz/nötr)
+2. [x] Her haber için sentiment skoru
+3. [x] Trend analizi (olumlu/olumsuz/nötr)
+
+Kabul Kriterleri: ✅ TAMAMLANDI
+- [x] LLM sentiment skoru çalışıyor
+- [x] Trend hesaplaması yapılıyor
 ```
 
 ---
@@ -611,11 +630,11 @@ Yapılacaklar:
 
 ### Açık Sorular
 
-1. KKB API rate limit var mı?
-2. TSG'de captcha var mı?
-3. Demo için hangi firmalar kullanılacak?
+1. ~~KKB API rate limit var mı?~~ → ✅ Hayır, sınırsız
+2. ~~TSG'de captcha var mı?~~ → ✅ EVET, Tesseract OCR ile çözüldü
+3. Demo için hangi firmalar kullanılacak? → Belirlenmeli
 
 ---
 
 > **Bu döküman canlı bir dökümandır.** Her gün güncellenir.
-> Son güncelleme: 6 Aralık 2024
+> Son güncelleme: 8 Aralık 2024

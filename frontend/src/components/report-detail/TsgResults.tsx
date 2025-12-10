@@ -63,7 +63,7 @@ export function TsgResults({ data }: TsgResultsProps) {
           Ortaklık Yapısı
         </h4>
         <div className="space-y-3">
-          {data.ortaklar.map((ortak, index) => (
+          {(data?.ortaklar || []).map((ortak, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, x: -10 }}
@@ -97,7 +97,7 @@ export function TsgResults({ data }: TsgResultsProps) {
           Yönetim Kurulu
         </h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {data.yonetim_kurulu.map((uye, index) => (
+          {(data?.yonetim_kurulu || []).map((uye, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 10 }}
@@ -113,14 +113,14 @@ export function TsgResults({ data }: TsgResultsProps) {
       </Card>
 
       {/* Sermaye Değişiklikleri */}
-      {data.sermaye_degisiklikleri.length > 0 && (
+      {(data?.sermaye_degisiklikleri || []).length > 0 && (
         <Card className="p-5">
           <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-kkb-600" />
             Sermaye Değişiklikleri
           </h4>
           <div className="space-y-2">
-            {data.sermaye_degisiklikleri.map((degisiklik, index) => (
+            {(data?.sermaye_degisiklikleri || []).map((degisiklik, index) => (
               <div
                 key={index}
                 className="flex items-center justify-between p-3 bg-gray-50 rounded-lg text-sm"
