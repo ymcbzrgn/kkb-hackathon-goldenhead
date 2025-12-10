@@ -12,7 +12,7 @@ interface RiskGaugeProps {
   size?: 'sm' | 'md' | 'lg';
 }
 
-const riskColors: Record<RiskLevel, { primary: string; secondary: string; text: string }> = {
+const riskColors: Record<string, { primary: string; secondary: string; text: string }> = {
   dusuk: {
     primary: '#22c55e',
     secondary: '#dcfce7',
@@ -40,7 +40,14 @@ const riskColors: Record<RiskLevel, { primary: string; secondary: string; text: 
   },
 };
 
-const riskLabels: Record<RiskLevel, string> = {
+// Default fallback for unknown risk levels
+const defaultRiskColors = {
+  primary: '#6B7280',
+  secondary: '#E5E7EB',
+  text: 'text-gray-600',
+};
+
+const riskLabels: Record<string, string> = {
   dusuk: 'Düşük Risk',
   orta_dusuk: 'Orta-Düşük Risk',
   orta: 'Orta Risk',
@@ -56,7 +63,7 @@ const sizeConfig = {
 
 export function RiskGauge({ score, riskLevel, size = 'md' }: RiskGaugeProps) {
   const config = sizeConfig[size];
-  const colors = riskColors[riskLevel];
+  const colors = riskColors[riskLevel] || defaultRiskColors;
   
   const radius = (config.width - config.stroke) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -117,7 +124,7 @@ export function RiskGauge({ score, riskLevel, size = 'md' }: RiskGaugeProps) {
         className={`mt-3 px-4 py-1.5 rounded-full text-sm font-semibold ${colors.text}`}
         style={{ backgroundColor: colors.secondary }}
       >
-        {riskLabels[riskLevel]}
+        {riskLabels[riskLevel] || 'Bilinmiyor'}
       </motion.div>
     </div>
   );

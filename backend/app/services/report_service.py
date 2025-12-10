@@ -5,7 +5,7 @@ Rapor iş mantığı
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.models.report import Report, ReportStatus
 
@@ -60,9 +60,9 @@ class ReportService:
             if message:
                 report.status_message = message
             if status == ReportStatus.PROCESSING.value:
-                report.started_at = datetime.utcnow()
+                report.started_at = datetime.now(timezone.utc)
             elif status == ReportStatus.COMPLETED.value:
-                report.completed_at = datetime.utcnow()
+                report.completed_at = datetime.now(timezone.utc)
                 if report.started_at:
                     report.duration_seconds = int((report.completed_at - report.started_at).total_seconds())
             self.db.commit()
@@ -94,7 +94,7 @@ class ReportService:
         if report:
             if report.status == ReportStatus.PROCESSING.value:
                 raise ValueError("İşlemi devam eden rapor silinemez")
-            report.deleted_at = datetime.utcnow()
+            report.deleted_at = datetime.now(timezone.utc)
             self.db.commit()
             return True
         return False
@@ -119,7 +119,7 @@ class ReportService:
             "progress": progress,
             "message": message,
             "status": status,
-            "updated_at": datetime.utcnow().isoformat() + "Z"
+            "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
         current_data["agent_progresses"] = agent_progresses

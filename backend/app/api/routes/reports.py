@@ -165,9 +165,17 @@ async def get_report(
     report_data = report.to_dict()
 
     # Agent sonuçları ekle (frontend tsg, ihale, news bekliyor - _agent suffix'i kaldır)
+    # Frontend status, duration_seconds ve data bekliyor
     if report.agent_results:
         report_data["agent_results"] = {
-            result.agent_id.replace("_agent", ""): result.data
+            result.agent_id.replace("_agent", ""): {
+                "status": result.status,
+                "duration_seconds": result.duration_seconds,
+                "data": result.data,
+                "summary": result.summary,
+                "key_findings": result.key_findings,
+                "warning_flags": result.warning_flags
+            }
             for result in report.agent_results
         }
 

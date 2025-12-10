@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: news-orchestrator
+  namespace: news-agent
+  labels:
+    app: news-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: news-orchestrator
+  template:
+    metadata:
+      labels:
+        app: news-orchestrator
+    spec:
+      containers:
+      - name: orchestrator
+        image: news-orchestrator:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: scraper-config
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: news-orchestrator
+  namespace: news-agent
+spec:
+  selector:
+    app: news-orchestrator
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP

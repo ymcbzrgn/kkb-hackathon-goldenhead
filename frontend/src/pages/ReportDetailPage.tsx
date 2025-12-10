@@ -25,6 +25,7 @@ import {
   TranscriptAccordion,
 } from '@/components/report-detail';
 import { useReport } from '@/hooks/useReport';
+import { transformAgentResults } from '@/utils/agentAdapter';
 import { useDeleteReport } from '@/hooks/useDeleteReport';
 import { fadeInUp, staggerContainer } from '@/utils/animations';
 import { formatDate, formatDuration } from '@/utils/formatters';
@@ -243,7 +244,7 @@ export function ReportDetailPage() {
                 <FileText className="w-5 h-5 text-kkb-600" />
                 Ajan Bulguları
               </h2>
-              <AgentResults results={report.agent_results} />
+              <AgentResults results={transformAgentResults(report.agent_results)} />
             </motion.div>
 
             {/* Transcript */}

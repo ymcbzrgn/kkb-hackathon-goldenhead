@@ -144,7 +144,7 @@ class IhaleAgent(BaseAgent):
     MAX_EXECUTION_TIME = 300  # 5 dakika (90 gun tarama icin)
 
     # Varsayilan tarama suresi (Demo: 7 gun, Production: 90 gun)
-    DEFAULT_SEARCH_DAYS = 7
+    DEFAULT_SEARCH_DAYS = 90
 
     def __init__(self):
         super().__init__(
@@ -161,7 +161,7 @@ class IhaleAgent(BaseAgent):
         company_name: str,
         vergi_no: Optional[str] = None,
         mersis_no: Optional[str] = None,
-        search_days: int = 7
+        search_days: int = 90
     ) -> AgentResult:
         """
         Ana calistirma metodu - TSG tarzi.
@@ -518,10 +518,10 @@ async def test_ihale_agent():
 
     # Progress callback
     def on_progress(progress):
-        print(f"[{progress.percentage}%] {progress.message}")
+        print(f"[{progress.progress}%] {progress.message}")
 
     # Test firmasi (sadece 3 gun tara - hizli test)
-    result = await agent.execute(
+    result = await agent.run(
         company_name="TEST FIRMA A.S.",
         search_days=3,
         progress_callback=on_progress

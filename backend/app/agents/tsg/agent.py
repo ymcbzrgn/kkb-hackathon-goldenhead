@@ -380,32 +380,42 @@ class TSGAgent(BaseAgent):
 
     def _is_complete(self, data: Dict) -> bool:
         """
-        5/5 alan dolu mu kontrol et.
+        v9.4: ESNEK KONTROL - 3/5 alan dolu mu kontrol et.
 
-        Hackathon gereksinimleri:
-        - Firma Unvani
-        - Tescil Konusu
-        - Mersis Numarasi
-        - Yoneticiler (liste, en az 1 eleman)
-        - Imza Yetkilisi
+        BUG FIX: 5/5 zorunlu çok katıydı:
+        - Mersis neredeyse hiç bulunmuyor
+        - Yöneticiler çoğu zaman listelenemez
+
+        Yeni kural:
+        - Firma Unvani ZORUNLU
+        - Tescil Konusu veya Imza Yetkilisi'nden en az 1'i
+        - Toplamda 3+ alan dolu
 
         Returns:
-            bool: 5 alanin hepsi dolu mu
+            bool: Yeterli veri var mı
         """
-        required = ["Firma Unvani", "Tescil Konusu", "Mersis Numarasi", "Yoneticiler", "Imza Yetkilisi"]
+        # Kritik alan: Firma Unvani mutlaka olmalı
+        if not data.get("Firma Unvani"):
+            return False
 
-        for field in required:
+        # Tüm alanları say
+        all_fields = ["Firma Unvani", "Tescil Konusu", "Mersis Numarasi", "Yoneticiler", "Imza Yetkilisi"]
+        filled_count = 0
+
+        for field in all_fields:
             value = data.get(field)
+            if field == "Yoneticiler":
+                if value and len(value) > 0:
+                    filled_count += 1
+            elif value and value != "":
+                filled_count += 1
 
-            # None veya bos string
-            if value is None or value == "":
-                return False
+        # 3/5 alan dolu ise yeterli
+        if filled_count >= 3:
+            debug(f"_is_complete: {filled_count}/5 alan dolu - YETERLI")
+            return True
 
-            # Yoneticiler icin bos liste kontrolu
-            if field == "Yoneticiler" and (not value or len(value) == 0):
-                return False
-
-        return True
+        return False
 
     def _find_ilan_index(self, target_ilan: Dict, search_results: List[Dict]) -> int:
         """
@@ -528,7 +538,9 @@ class TSGAgent(BaseAgent):
             # OCR ile metin cikar
             ocr_text = self._extract_text_from_pdf(pdf_bytes)
             if not ocr_text or len(ocr_text) < 100:
-                warn(f"{ilan_type} OCR yetersiz metin")
+                warn(f"{ilan_type} OCR yetersiz metin ({len(ocr_text) if ocr_text else 0} karakter)")
+                # Boş OCR'ı da sonuca ekle (en azından PDF indirildi)
+                merged_result["ocr_failures"] = merged_result.get("ocr_failures", 0) + 1
                 continue
 
             # Firma ile ilgili bolumu filtrele

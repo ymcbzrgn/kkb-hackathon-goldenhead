@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { connectWebSocket, type WebSocketConnection } from '@/services/websocket';
 import { useReportStore } from '@/stores/reportStore';
 import { useAgentStore } from '@/stores/agentStore';
@@ -18,14 +19,15 @@ interface UseWebSocketOptions {
   enabled?: boolean;
 }
 
-export function useWebSocket({ 
-  reportId, 
-  companyName, 
-  onComplete, 
+export function useWebSocket({
+  reportId,
+  companyName,
+  onComplete,
   onError,
   enabled = true,
 }: UseWebSocketOptions) {
   const connectionRef = useRef<WebSocketConnection | null>(null);
+  const queryClient = useQueryClient();
 
   // Store actions
   const { 
@@ -65,6 +67,9 @@ export function useWebSocket({
       case 'job_completed':
         setLivePhase('completed');
         endLiveSession();
+        // Query cache'i invalidate et - rapor sayfasinda guncel veri gosterilsin
+        queryClient.invalidateQueries({ queryKey: ['report', reportId] });
+        queryClient.invalidateQueries({ queryKey: ['reports'] });
         onComplete?.();
         break;
 

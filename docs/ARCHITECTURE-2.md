@@ -755,7 +755,7 @@ def generate_report(report_id: str, company_name: str):
 ### KKB Kloudeks API
 
 ```
-Base URL: https://llmgateway.klfrm.com/api/v1
+Base URL: https://mia.csp.kloudeks.com/api/v1
 Auth: Bearer token
 ```
 

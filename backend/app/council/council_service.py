@@ -17,6 +17,12 @@ from app.council.personas import (
 from app.council.prompts import get_system_prompt
 
 
+# Council speech pacing - insan okuma hizinda streaming
+SPEECH_CHUNK_DELAY_MS = 30  # Her chunk arasinda bekleme (ms)
+SPEECH_MIN_BUFFER_SIZE = 6  # Minimum buffer boyutu (karakter)
+SPEECH_MAX_BUFFER_TIME = 0.08  # Maksimum buffer suresi (saniye)
+
+
 class CouncilService:
     """
     Kredi Komitesi Servisi.
@@ -26,13 +32,58 @@ class CouncilService:
     2. Her üyenin sunumunu al (LLM ile)
     3. Tartışma turunu yönet
     4. Final kararı oluştur
-    5. WebSocket üzerinden streaming yap
+    5. WebSocket üzerinden streaming yap (Redis Pub/Sub ile)
     """
 
-    def __init__(self):
+    def __init__(self, report_id: str = None):
+        self.report_id = report_id
         self.llm = LLMClient()
         self.members = COUNCIL_MEMBERS
         self.phases = MEETING_PHASES
+
+    async def _stream_speech_with_pacing(self, member_id: str, llm_stream) -> str:
+        """
+        Konusmayi insan okuma hizinda stream et.
+        LLM chunk'larini buffer'layip duzgun araliklarda gonderir.
+        """
+        full_response = ""
+        buffer = ""
+        last_emit_time = asyncio.get_event_loop().time()
+
+        async for chunk in llm_stream:
+            full_response += chunk
+            buffer += chunk
+
+            now = asyncio.get_event_loop().time()
+            elapsed = now - last_emit_time
+
+            # Buffer'i gonder: ya zaman doldu ya da yeterli karakter birikti
+            if elapsed >= SPEECH_MAX_BUFFER_TIME or len(buffer) >= SPEECH_MIN_BUFFER_SIZE:
+                self._publish_event("council_speech", {
+                    "speaker_id": member_id,
+                    "chunk": buffer,
+                    "is_complete": False
+                })
+                buffer = ""
+                last_emit_time = now
+                # Kucuk bir delay ekle - typing efekti icin
+                await asyncio.sleep(SPEECH_CHUNK_DELAY_MS / 1000.0)
+
+        # Kalan buffer'i gonder
+        if buffer:
+            self._publish_event("council_speech", {
+                "speaker_id": member_id,
+                "chunk": buffer,
+                "is_complete": False
+            })
+
+        return full_response
+
+    def _publish_event(self, event_type: str, payload: dict):
+        """Redis Pub/Sub üzerinden event gönder"""
+        if self.report_id:
+            from app.services.redis_pubsub import publish_agent_event
+            publish_agent_event(self.report_id, event_type, payload)
 
     async def run_meeting(
         self,
@@ -57,20 +108,19 @@ class CouncilService:
         scores: Dict[str, int] = {}
         start_time = datetime.utcnow()
 
-        # Toplantı başladı event'i
-        if ws_callback:
-            await ws_callback("council_started", {
-                "total_phases": len(self.phases),
-                "members": [
-                    {
-                        "id": m.id,
-                        "name": m.name,
-                        "role": m.role,
-                        "emoji": m.emoji
-                    }
-                    for m in self.members.values()
-                ]
-            })
+        # Toplantı başladı event'i (Redis Pub/Sub)
+        self._publish_event("council_started", {
+            "total_phases": len(self.phases),
+            "members": [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "role": m.role,
+                    "emoji": m.emoji
+                }
+                for m in self.members.values()
+            ]
+        })
 
         # Context hazırla
         context = self._prepare_context(company_name, agent_data, intelligence_report)
@@ -162,7 +212,14 @@ class CouncilService:
         if tsg_data:
             tsg = tsg_data.get("tsg_sonuc", {}).get("yapilandirilmis_veri", {})
             yoneticiler = tsg.get("Yoneticiler", [])
-            yonetici_str = ", ".join(yoneticiler) if yoneticiler else "Bilinmiyor"
+            # Yöneticiler object array veya string array olabilir
+            if yoneticiler and isinstance(yoneticiler[0], dict):
+                yonetici_str = ", ".join([
+                    f"{y.get('ad', '')} ({y.get('gorev', '')})"
+                    for y in yoneticiler
+                ])
+            else:
+                yonetici_str = ", ".join(yoneticiler) if yoneticiler else "Bilinmiyor"
             parts.append(f"""
 TICARET SICIL BILGILERI:
 - Firma Unvani: {tsg.get("Firma Unvani", "Bilinmiyor")}
@@ -174,18 +231,37 @@ TICARET SICIL BILGILERI:
         else:
             parts.append("\nTICARET SICIL: Veri bulunamadi!")
 
-        # Ihale Verileri
+        # Ihale Verileri (K8s agent ve local agent farklı format kullanıyor)
         ihale_data = context.get("ihale_data")
         if ihale_data:
-            yasak_durumu = ihale_data.get("yasak_durumu", False)
+            # Her iki formatı da destekle: yasakli_mi (K8s) veya yasak_durumu (local)
+            yasak_durumu = ihale_data.get("yasakli_mi", ihale_data.get("yasak_durumu", False))
             yasak_str = "EVET - AKTIF YASAK!" if yasak_durumu else "Hayir"
+
+            # Her iki formatı da destekle: toplam_karar (K8s) veya bulunan_toplam_yasaklama (local)
+            toplam = ihale_data.get("toplam_karar", ihale_data.get("bulunan_toplam_yasaklama", 0))
+            eslesen = ihale_data.get("eslesen_karar", 0)
+            yasaklamalar = ihale_data.get("yasaklamalar", [])
+
+            # Yasaklamalardan ek bilgi çıkar
+            if yasaklamalar and len(yasaklamalar) > 0:
+                ilk = yasaklamalar[0]
+                yasaklayan_kurum = ilk.get("yasaklayan_kurum", "-")
+                yasak_suresi = ilk.get("yasak_suresi", "-")
+                risk = "YUKSEK" if eslesen > 0 else "DUSUK"
+            else:
+                yasaklayan_kurum = ihale_data.get("yasaklayan_kurum", "-")
+                yasak_suresi = ihale_data.get("yasak_suresi", "-")
+                risk = ihale_data.get("risk_degerlendirmesi", "Bilinmiyor")
+
             parts.append(f"""
 IHALE DURUMU:
 - Aktif Yasak: {yasak_str}
-- Gecmis Yasak Sayisi: {ihale_data.get("bulunan_toplam_yasaklama", 0)}
-- Risk Degerlendirmesi: {ihale_data.get("risk_degerlendirmesi", "Bilinmiyor")}
-- Yasaklayan Kurum: {ihale_data.get("yasaklayan_kurum", "-")}
-- Yasak Suresi: {ihale_data.get("yasak_suresi", "-")}""")
+- Toplam Karar: {toplam}
+- Eslesen Karar: {eslesen}
+- Risk Degerlendirmesi: {risk}
+- Yasaklayan Kurum: {yasaklayan_kurum}
+- Yasak Suresi: {yasak_suresi}""")
         else:
             parts.append("\nIHALE DURUMU: Veri bulunamadi!")
 
@@ -251,22 +327,20 @@ Risk Faktorleri:
         if not member:
             return
 
-        # Phase değişti event'i
-        if ws_callback:
-            await ws_callback("council_phase_changed", {
-                "phase": phase["phase"],
-                "phase_name": phase["name"],
-                "title": phase["title"]
-            })
+        # Phase değişti event'i (Redis Pub/Sub)
+        self._publish_event("council_phase_changed", {
+            "phase": phase["phase"],
+            "phase_name": phase["name"],
+            "title": phase["title"]
+        })
 
-        # Konuşmacı değişti event'i
-        if ws_callback:
-            await ws_callback("council_speaker_changed", {
-                "speaker_id": member.id,
-                "speaker_name": member.name,
-                "speaker_role": member.role,
-                "speaker_emoji": member.emoji
-            })
+        # Konuşmacı değişti event'i (Redis Pub/Sub)
+        self._publish_event("council_speaker_changed", {
+            "speaker_id": member.id,
+            "speaker_name": member.name,
+            "speaker_role": member.role,
+            "speaker_emoji": member.emoji
+        })
 
         # System prompt al
         system_prompt = get_system_prompt(speaker_id)
@@ -274,41 +348,34 @@ Risk Faktorleri:
         # User prompt hazırla
         user_prompt = self._build_user_prompt(phase, context, scores)
 
-        # LLM'den yanıt al (streaming)
-        full_response = ""
-        async for chunk in self.llm.chat_stream(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            model="gpt-oss-120b"
-        ):
-            full_response += chunk
-            if ws_callback:
-                await ws_callback("council_speech", {
-                    "speaker_id": member.id,
-                    "chunk": chunk,
-                    "is_final": False
-                })
+        # LLM'den yanıt al (streaming + pacing ile)
+        full_response = await self._stream_speech_with_pacing(
+            member.id,
+            self.llm.chat_stream(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model="gpt-oss-120b"
+            )
+        )
 
-        # Final chunk
-        if ws_callback:
-            await ws_callback("council_speech", {
-                "speaker_id": member.id,
-                "chunk": "",
-                "is_final": True
-            })
+        # Final chunk (Redis Pub/Sub)
+        self._publish_event("council_speech", {
+            "speaker_id": member.id,
+            "chunk": "",
+            "is_complete": True
+        })
 
         # Skor çıkar (eğer sunum aşamasıysa)
         if phase["name"].endswith("_presentation"):
             score = self._extract_score(full_response, member)
             scores[speaker_id] = score
 
-            if ws_callback:
-                await ws_callback("council_score_given", {
-                    "member_id": member.id,
-                    "score": score
-                })
+            self._publish_event("council_score_given", {
+                "member_id": member.id,
+                "score": score
+            })
 
         # Transcript'e ekle
         transcript.append({
@@ -329,12 +396,11 @@ Risk Faktorleri:
         """Tartışma turunu çalıştır"""
         phase = self.phases[6]  # discussion phase
 
-        if ws_callback:
-            await ws_callback("council_phase_changed", {
-                "phase": phase["phase"],
-                "phase_name": phase["name"],
-                "title": phase["title"]
-            })
+        self._publish_event("council_phase_changed", {
+            "phase": phase["phase"],
+            "phase_name": phase["name"],
+            "title": phase["title"]
+        })
 
         # En farklı görüşe sahip iki üyeyi bul
         if len(scores) >= 2:
@@ -380,13 +446,12 @@ Risk Faktorleri:
         if not member or not target:
             return
 
-        if ws_callback:
-            await ws_callback("council_speaker_changed", {
-                "speaker_id": member.id,
-                "speaker_name": member.name,
-                "speaker_role": member.role,
-                "speaker_emoji": member.emoji
-            })
+        self._publish_event("council_speaker_changed", {
+            "speaker_id": member.id,
+            "speaker_name": member.name,
+            "speaker_role": member.role,
+            "speaker_emoji": member.emoji
+        })
 
         system_prompt = get_system_prompt(speaker_id)
         user_prompt = f"""
@@ -398,28 +463,22 @@ Sizin skorunuz: {scores.get(speaker_id, 50)}
 Kısa ve öz bir şekilde (2-3 cümle) görüşünüzü savunun veya uzlaşma arayın.
 """
 
-        full_response = ""
-        async for chunk in self.llm.chat_stream(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            model="gpt-oss-120b"
-        ):
-            full_response += chunk
-            if ws_callback:
-                await ws_callback("council_speech", {
-                    "speaker_id": member.id,
-                    "chunk": chunk,
-                    "is_final": False
-                })
+        full_response = await self._stream_speech_with_pacing(
+            member.id,
+            self.llm.chat_stream(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model="gpt-oss-120b"
+            )
+        )
 
-        if ws_callback:
-            await ws_callback("council_speech", {
-                "speaker_id": member.id,
-                "chunk": "",
-                "is_final": True
-            })
+        self._publish_event("council_speech", {
+            "speaker_id": member.id,
+            "chunk": "",
+            "is_complete": True
+        })
 
         transcript.append({
             "phase": 7,
@@ -440,20 +499,18 @@ Kısa ve öz bir şekilde (2-3 cümle) görüşünüzü savunun veya uzlaşma ar
         phase = self.phases[7]  # decision phase
         moderator = get_member("moderator")
 
-        if ws_callback:
-            await ws_callback("council_phase_changed", {
-                "phase": phase["phase"],
-                "phase_name": phase["name"],
-                "title": phase["title"]
-            })
+        self._publish_event("council_phase_changed", {
+            "phase": phase["phase"],
+            "phase_name": phase["name"],
+            "title": phase["title"]
+        })
 
-        if ws_callback:
-            await ws_callback("council_speaker_changed", {
-                "speaker_id": moderator.id,
-                "speaker_name": moderator.name,
-                "speaker_role": moderator.role,
-                "speaker_emoji": moderator.emoji
-            })
+        self._publish_event("council_speaker_changed", {
+            "speaker_id": moderator.id,
+            "speaker_name": moderator.name,
+            "speaker_role": moderator.role,
+            "speaker_emoji": moderator.emoji
+        })
 
         # Ağırlıklı skor hesapla
         weighted_score = calculate_weighted_score(scores)
@@ -482,28 +539,22 @@ Konsensüs: %{consensus * 100:.0f}
 Kısa bir özet yapın (3-4 cümle).
 """
 
-        full_response = ""
-        async for chunk in self.llm.chat_stream(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            model="gpt-oss-120b"
-        ):
-            full_response += chunk
-            if ws_callback:
-                await ws_callback("council_speech", {
-                    "speaker_id": moderator.id,
-                    "chunk": chunk,
-                    "is_final": False
-                })
+        full_response = await self._stream_speech_with_pacing(
+            moderator.id,
+            self.llm.chat_stream(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                model="gpt-oss-120b"
+            )
+        )
 
-        if ws_callback:
-            await ws_callback("council_speech", {
-                "speaker_id": moderator.id,
-                "chunk": "",
-                "is_final": True
-            })
+        self._publish_event("council_speech", {
+            "speaker_id": moderator.id,
+            "chunk": "",
+            "is_complete": True
+        })
 
         transcript.append({
             "phase": 8,
@@ -513,14 +564,13 @@ Kısa bir özet yapın (3-4 cümle).
             "timestamp": datetime.utcnow().isoformat()
         })
 
-        # Council decision event'i
-        if ws_callback:
-            await ws_callback("council_decision", {
-                "final_score": final_score,
-                "risk_level": risk_level,
-                "decision": decision,
-                "consensus": consensus
-            })
+        # Council decision event'i (Redis Pub/Sub)
+        self._publish_event("council_decision", {
+            "final_score": final_score,
+            "risk_level": risk_level,
+            "decision": decision,
+            "consensus": consensus
+        })
 
         return {
             "final_score": final_score,
@@ -596,10 +646,12 @@ ONEMLI: Skorunuzu [SKOR: XX] formatinda belirtin.
 
     def _determine_decision(self, score: int, context: Dict) -> str:
         """Skor ve context'ten karar belirle"""
-        # İhale yasağı varsa otomatik red
+        # İhale yasağı varsa otomatik red (her iki formatı da destekle)
         ihale_data = context.get("ihale_data", {})
-        if isinstance(ihale_data, dict) and ihale_data.get("yasak_durumu"):
-            return "red"
+        if isinstance(ihale_data, dict):
+            yasak_durumu = ihale_data.get("yasakli_mi", ihale_data.get("yasak_durumu", False))
+            if yasak_durumu:
+                return "red"
 
         if score <= 30:
             return "onay"

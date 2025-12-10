@@ -112,11 +112,13 @@ def generate_report_task(self, report_id: str, company_name: str):
                 decision_summary=council.get("decision_summary") or council.get("summary")
             )
 
-            db.commit()
+            # Status'u önce güncelle, sonra commit et
+            # Böylece commit fail olsa bile status doğru olur
             report_service.update_status(report_id, "completed")
-        else:
             db.commit()
+        else:
             report_service.update_status(report_id, "failed", "Council sonucu alınamadı")
+            db.commit()
 
         db.close()
         return {"status": "completed", "report_id": report_id}

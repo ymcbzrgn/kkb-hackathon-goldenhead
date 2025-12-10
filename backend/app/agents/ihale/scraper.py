@@ -67,7 +67,7 @@ class ResmiGazeteScraper:
     REQUEST_DELAY = 1.5  # Rate limiting (saniye)
 
     # Tarama ayarlari (Demo: 7 gun, Production: 90 gun)
-    DEFAULT_DAYS = 7  # Son 7 gun
+    DEFAULT_DAYS = 90  # Son 90 gun
 
     def __init__(self):
         self.browser = None
@@ -526,7 +526,7 @@ class ResmiGazeteScraper:
             text = await self.page.inner_text("body")
 
             # Linkleri al
-            links = await self.page.query_selector_all(self.FIHRIST_ITEM)
+            links = await self.page.query_selector_all(self.LINK_SELECTOR)
             link_texts = []
 
             for link in links:
