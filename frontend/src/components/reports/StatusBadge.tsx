@@ -16,7 +16,14 @@ interface StatusBadgeProps {
   animated?: boolean;
 }
 
-const statusConfig = {
+const statusConfig: Record<ReportStatus, {
+  label: string;
+  icon: typeof Clock;
+  bgColor: string;
+  textColor: string;
+  iconColor: string;
+  borderColor: string;
+}> = {
   pending: {
     label: 'Bekliyor',
     icon: Clock,
@@ -48,6 +55,14 @@ const statusConfig = {
     textColor: 'text-red-700',
     iconColor: 'text-red-500',
     borderColor: 'border-red-200',
+  },
+  cancelled: {
+    label: 'İptal Edildi',
+    icon: XCircle,
+    bgColor: 'bg-gray-50',
+    textColor: 'text-gray-600',
+    iconColor: 'text-gray-400',
+    borderColor: 'border-gray-200',
   },
 };
 

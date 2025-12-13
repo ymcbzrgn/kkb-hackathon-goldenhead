@@ -140,12 +140,18 @@ class IhaleAgent(BaseAgent):
     12. risk_degerlendirmesi
     """
 
-    # Timeout (hackathon guvenligi)
-    MAX_EXECUTION_TIME = 300  # 5 dakika (90 gun tarama icin)
+    # ============================================
+    # FULL MODE: Sınırsız süre, MAX araştırma
+    # ============================================
+    MAX_EXECUTION_TIME = 3600  # 60 dakika (sınırsız tarama için)
+    DEFAULT_SEARCH_DAYS = 1095  # 3 yıl geriye (çok kapsamlı)
 
-    # Varsayilan tarama suresi (Demo: 7 gun, Production: 90 gun)
-    DEFAULT_SEARCH_DAYS = 90
-    DEMO_SEARCH_DAYS = 7  # Demo mode icin kisa tarama
+    # ============================================
+    # DEMO MODE: 150 saniye (orchestrator kalan süreyi verir)
+    # Paralel çalışır, TSG'den sonra başlar
+    # ============================================
+    DEMO_MAX_EXECUTION_TIME = 150  # 2.5 dakika - orchestrator tarafından kontrol edilir
+    DEMO_SEARCH_DAYS = 365  # 1 yıl - demo için kısaltıldı
 
     def __init__(self, demo_mode: bool = False):
         super().__init__(
@@ -157,9 +163,24 @@ class IhaleAgent(BaseAgent):
         self.company_matcher = IhaleCompanyMatcher()
         self.pdf_reader = IhalePDFReader()
         self.demo_mode = demo_mode
-        self.search_days = self.DEMO_SEARCH_DAYS if demo_mode else self.DEFAULT_SEARCH_DAYS
+
+        # Partial results - timeout durumunda kullanılacak
+        self._partial_results = {
+            "taranan_gun_sayisi": 0,
+            "bulunan_yasaklama_sayisi": 0,
+            "yasaklamalar": [],
+            "eslesen_karar": 0
+        }
+
+        # Demo/Full mode parametreleri
         if demo_mode:
-            log(f"IhaleAgent: DEMO MODE - Son {self.search_days} gun taranacak")
+            self.search_days = self.DEMO_SEARCH_DAYS
+            self.max_execution_time = self.DEMO_MAX_EXECUTION_TIME
+            log(f"IhaleAgent: DEMO MODE - Son {self.search_days} gun, max {self.max_execution_time}s")
+        else:
+            self.search_days = self.DEFAULT_SEARCH_DAYS
+            self.max_execution_time = self.MAX_EXECUTION_TIME
+            log(f"IhaleAgent: FULL MODE - Son {self.search_days} gun, max {self.max_execution_time}s")
 
     async def run(
         self,
@@ -184,11 +205,42 @@ class IhaleAgent(BaseAgent):
         if search_days is None:
             search_days = self.search_days
 
-        step(f"IHALE AGENT BASLIYOR: {company_name} (Son {search_days} gun)")
+        step(f"IHALE AGENT BASLIYOR: {company_name} (Son {search_days} gun, max {self.max_execution_time}s)")
         self.report_progress(5, "Ihale Agent baslatiliyor...")
 
         try:
-            with Timer("Ihale Agent toplam sure"):
+            # Timeout wrapper - max_execution_time sonunda otomatik dur
+            return await asyncio.wait_for(
+                self._run_internal(company_name, vergi_no, mersis_no, search_days),
+                timeout=self.max_execution_time
+            )
+
+        except asyncio.TimeoutError:
+            error(f"Ihale Agent TIMEOUT! ({self.max_execution_time}s)")
+            return self._create_timeout_result(company_name)
+
+        except Exception as e:
+            error(f"Ihale Agent HATA: {e}")
+            return self._create_error_result(company_name, str(e))
+
+    async def _run_internal(
+        self,
+        company_name: str,
+        vergi_no: Optional[str],
+        mersis_no: Optional[str],
+        search_days: int
+    ) -> AgentResult:
+        """Internal run method - timeout wrapper tarafından çağrılır."""
+        # Reset partial results
+        self._partial_results = {
+            "firma_adi": company_name,
+            "taranan_gun_sayisi": 0,
+            "bulunan_yasaklama_sayisi": 0,
+            "yasaklamalar": [],
+            "eslesen_karar": None
+        }
+
+        with Timer("Ihale Agent toplam sure"):
                 # 1. TSG firma bilgilerini hazirla
                 tsg_company = {
                     "firma_adi": company_name,
@@ -202,15 +254,27 @@ class IhaleAgent(BaseAgent):
                 step("RESMI GAZETE TARAMASI")
                 self.report_progress(15, f"Resmi Gazete taranıyor (son {search_days} gün)...")
 
-                # Progress callback for scraper
+                # Progress callback for scraper - also updates partial results
                 def scraper_progress(progress_pct: int, message: str):
                     self.report_progress(progress_pct, message)
+                    # Parse taranan gün sayısı from message (örn: "Resmi Gazete taraniyor: 05.12.2025 (6/260)")
+                    if "(" in message and "/" in message:
+                        try:
+                            parts = message.split("(")[1].split(")")[0].split("/")
+                            self._partial_results["taranan_gun_sayisi"] = int(parts[0])
+                        except:
+                            pass
 
                 async with ResmiGazeteScraper() as scraper:
                     scrape_result = await scraper.search_yasaklama_kararlari(
                         days=search_days,
                         progress_callback=scraper_progress
                     )
+
+                # Update partial results with scrape data
+                self._partial_results["taranan_gun_sayisi"] = scrape_result.get("taranan_gun_sayisi", 0)
+                self._partial_results["bulunan_yasaklama_sayisi"] = scrape_result.get("bulunan_ilan_sayisi", 0)
+                self._partial_results["yasaklamalar"] = scrape_result.get("yasaklama_kararlari", [])
 
                 self.report_progress(50, f"Tarama tamamlandi: {scrape_result['bulunan_ilan_sayisi']} yasaklama karari")
 
@@ -285,22 +349,14 @@ class IhaleAgent(BaseAgent):
 
                 success(f"Ihale Agent tamamlandi: yasak_durumu={analysis.get('yasak_durumu')}")
 
-                return AgentResult(
-                    agent_id=self.agent_id,
-                    status="completed",
-                    data=result_data,
-                    summary=self._generate_summary(analysis),
-                    key_findings=self._extract_key_findings(analysis),
-                    warning_flags=self._extract_warnings(analysis)
-                )
-
-        except asyncio.TimeoutError:
-            error("Ihale Agent TIMEOUT!")
-            return self._create_timeout_result(company_name)
-
-        except Exception as e:
-            error(f"Ihale Agent HATA: {e}")
-            return self._create_error_result(company_name, str(e))
+        return AgentResult(
+            agent_id=self.agent_id,
+            status="completed",
+            data=result_data,
+            summary=self._generate_summary(analysis),
+            key_findings=self._extract_key_findings(analysis),
+            warning_flags=self._extract_warnings(analysis)
+        )
 
     async def _analyze_with_llm(
         self,
@@ -508,16 +564,45 @@ class IhaleAgent(BaseAgent):
         )
 
     def _create_timeout_result(self, company_name: str) -> AgentResult:
-        """Timeout sonucu olustur."""
+        """
+        Timeout sonucu olustur - PARTIAL DATA dahil.
+        Timeout olsa bile o ana kadar bulunan veriyi kaydet.
+        """
+        partial = self._partial_results
+        taranan_gun = partial.get("taranan_gun_sayisi", 0)
+        bulunan_yasak = partial.get("bulunan_yasaklama_sayisi", 0)
+        yasaklamalar = partial.get("yasaklamalar", [])
+
+        warn(f"Timeout - Partial data: {taranan_gun} gün tarandi, {bulunan_yasak} yasaklama bulundu")
+
+        # Partial data'yı council'a iletilecek formatta hazırla
+        result_data = {
+            "firma_adi": company_name,
+            "taranan_gun_sayisi": taranan_gun,
+            "bulunan_toplam_yasaklama": bulunan_yasak,
+            "yasaklamalar": yasaklamalar[:10],  # İlk 10 yasaklama
+            "timeout": True,
+            "timeout_mesaj": f"Tarama {taranan_gun} günde timeout oldu, tam tarama tamamlanamadı",
+            "yasak_durumu": False,  # Firma için eşleşme yapılamadı
+            "risk_degerlendirmesi": "belirsiz" if taranan_gun < 30 else "dusuk",
+            "sorgu_tarihi": datetime.now().isoformat(),
+            "kaynak": "Resmi Gazete - resmigazete.gov.tr (kismi tarama)"
+        }
+
+        # Eğer hiç veri yoksa failed, veri varsa completed (partial)
+        status = "completed" if taranan_gun > 0 else "failed"
+
         return AgentResult(
             agent_id=self.agent_id,
-            status="failed",
-            data={
-                "firma_adi": company_name,
-                "hata": "Islem zaman asimina ugradi",
-                "sorgu_tarihi": datetime.now().isoformat()
-            },
-            error="TIMEOUT: 5 dakika icinde tamamlanamadi"
+            status=status,
+            data=result_data,
+            summary=f"Kismi tarama: {taranan_gun} gun tarandi, {bulunan_yasak} yasaklama karari bulundu (timeout)",
+            key_findings=[
+                f"Taranan gun: {taranan_gun}",
+                f"Bulunan yasaklama: {bulunan_yasak}",
+                "Tarama timeout nedeniyle tamamlanamadi"
+            ],
+            warning_flags=["KISMI_TARAMA", "TIMEOUT"] if taranan_gun < 30 else ["TIMEOUT"]
         )
 
 

@@ -71,9 +71,9 @@ const initialState = {
   startedAt: null,
   estimatedDuration: 0,
   currentPhase: 'opening' as CouncilPhase,
-  phaseNumber: 0,
-  totalPhases: 8,
-  phaseTitle: '',
+  phaseNumber: 1,           // 0 → 1 (ilk tur 1'den başlar)
+  totalPhases: 7,           // 8 → 7 (demo'da 7 tur)
+  phaseTitle: 'Açılış',     // Boş değil, başlangıç değeri
   currentSpeaker: null,
   members: [],
   currentSpeech: '',

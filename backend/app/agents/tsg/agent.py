@@ -84,12 +84,7 @@ Sadece JSON dondur, aciklama yapma!
 
 class TSGAgent(BaseAgent):
     """
-    TSG Agent v3.5 - Hackathon Uyumlu + Zengin Veri Cekme
-
-    v3.5 Yenilikler:
-    - Tablo kolonlari dogru parse (8 kolon)
-    - unvan, sicil_no, sicil_mudurlugu, ilan_tipi mevcut
-    - Herhangi bir firma icin calisabilir
+    TSG Agent v9.5 - Demo/Full Mode Destekli
 
     Yetenekler:
     1. Tesseract OCR ile CAPTCHA cozme
@@ -97,8 +92,9 @@ class TSGAgent(BaseAgent):
     3. Akilli ilan secimi (kurulus/tescil oncelikli)
     4. Gazete sayfasi screenshot
     5. Tesseract OCR ile gazete okuma
-    6. LLM ile 5 baslik formatinda veri cikarma
-    7. PDF Generator ile profesyonel gazete sayfasi olusturma
+    6. LLM ile 8 baslik formatinda veri cikarma
+    7. Demo/Full mode time limits
+    8. PDF Generator ile profesyonel gazete sayfasi olusturma
 
     HACKATHON OUTPUT:
     - Firma Unvani (tablodaki unvan kolonundan)
@@ -116,15 +112,34 @@ class TSGAgent(BaseAgent):
     PDF_SERVICE_URL = "http://localhost:8001"  # Local test
     # PDF_SERVICE_URL = "http://pdf-downloader:8001"  # Docker network
 
-    def __init__(self):
+    # ============================================
+    # FULL MODE: Sınırsız süre, MAX araştırma
+    # ============================================
+    DEFAULT_MAX_TIME_SECONDS = 900  # 15 dakika (kapsamlı tarama)
+
+    # ============================================
+    # DEMO MODE: 90 saniye (orchestrator 90s verir)
+    # ============================================
+    DEMO_MAX_TIME_SECONDS = 90  # 1.5 dakika - orchestrator tarafından kontrol edilir
+
+    def __init__(self, demo_mode: bool = False):
         super().__init__(
             agent_id="tsg_agent",
             agent_name="TSG Agent",
-            agent_description="Ticaret Sicili Gazetesi - Hackathon Uyumlu 5 Baslik Format"
+            agent_description="Ticaret Sicili Gazetesi - Demo/Full Mode Destekli"
         )
         self.llm = LLMClient()
         self.pdf_generator = TSGPDFGenerator(self.DEBUG_DIR)
         self.city_finder = TSGCityFinder()
+        self.demo_mode = demo_mode
+
+        # Demo/Full mode time limits
+        if demo_mode:
+            self.max_time_seconds = self.DEMO_MAX_TIME_SECONDS
+            log(f"TSGAgent: DEMO MODE - Max {self.max_time_seconds}s")
+        else:
+            self.max_time_seconds = self.DEFAULT_MAX_TIME_SECONDS
+            log(f"TSGAgent: FULL MODE - Max {self.max_time_seconds}s")
 
     async def run(self, company_name: str) -> AgentResult:
         """
@@ -496,21 +511,29 @@ class TSGAgent(BaseAgent):
         Returns:
             Dict: 5 baslik formatinda sonuc (mumkun olan en dolu)
         """
-        step("MULTI-PDF INDIRME (v9.3 - 5dk Limit + 5/5 Dolana Kadar)")
+        step("MULTI-PDF INDIRME (v9.5 - Demo/Full Mode Time Limit)")
 
-        # v9.3: 5 dakika time limit (Hackathon icin)
+        # v9.5: Demo/Full mode time limit
         start_time = time.time()
-        MAX_TIME_SECONDS = 300  # 5 dakika
+        MAX_TIME_SECONDS = self.max_time_seconds  # Demo: 480s, Full: 900s
 
         merged_result = self._empty_hackathon_format()
-        priority_order = ["YONETIM", "KURULUS", "SERMAYE"]
+        # v9.4: Genişletilmiş ilan tipleri - daha fazla veri için
+        priority_order = [
+            "YONETIM",      # Güncel yöneticiler
+            "KURULUS",      # Kuruluş bilgileri, MERSIS
+            "SERMAYE",      # Sermaye artışları
+            "GENEL_KURUL",  # Genel kurul kararları
+            "TESCIL",       # Tescil işlemleri
+            "DIGER"         # Diğer önemli ilanlar
+        ]
         downloaded_count = 0
 
         for ilan_type in priority_order:
-            # v9.3: Time limit kontrolu
+            # v9.4: Time limit kontrolu
             elapsed = time.time() - start_time
             if elapsed > MAX_TIME_SECONDS:
-                warn(f"5 dakika limiti asildi! ({int(elapsed)}s)")
+                warn(f"8 dakika limiti asildi! ({int(elapsed)}s)")
                 break
             ilan = priority_ilanlar.get(ilan_type)
             if not ilan:

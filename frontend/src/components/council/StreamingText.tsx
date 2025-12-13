@@ -34,12 +34,16 @@ export function StreamingText({ text, isComplete, speed = 30 }: StreamingTextPro
     }
   }, [text, currentIndex, isComplete, speed]);
 
-  // Text değiştiğinde (yeni chunk geldiğinde) devam et
+  // Text değiştiğinde (yeni chunk geldiğinde) index'i ayarla
+  // Bu, text kısaldığında (yeni speaker) resetlemek için
   useEffect(() => {
-    if (text.length > currentIndex && !isComplete) {
-      // Yeni text geldi, devam et
+    if (text.length < currentIndex) {
+      // Text kısaldı (yeni konuşmacı), reset
+      setCurrentIndex(0);
+      setDisplayedText('');
     }
-  }, [text, currentIndex, isComplete]);
+    // text uzadığında ilk useEffect zaten devam ediyor
+  }, [text.length, currentIndex]);
 
   return (
     <span>

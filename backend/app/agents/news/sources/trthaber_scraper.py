@@ -62,8 +62,29 @@ class TRTHaberScraper(BaseNewsScraper):
                 error("TRT Haber arama URL'i açılamadı")
                 return []
 
-            await self._delay(3.0)
-            results = await self._parse_search_results(max_results)
+            # Sayfanın yüklenmesi için daha fazla bekle
+            await self._delay(5.0)
+
+            # İçerik için bekle
+            try:
+                await self.page.wait_for_selector("a[href*='/haber/']", timeout=10000)
+            except Exception:
+                debug("TRT Haber: Haber linki selector beklenemedi, devam ediliyor...")
+
+            # TAG SAYFASI KONTROLÜ: Sayfada tag başlığı var mı kontrol et
+            # Eğer tag sayfası boşsa veya redirect olduysa, boş dön
+            current_url = self.page.url
+            if "/etiket/" not in current_url:
+                warn(f"TRT Haber: Tag sayfasından redirect oldu: {current_url}")
+                return []
+
+            # Sayfa içeriğinde "sonuç bulunamadı" mesajı var mı?
+            page_content = await self.page.content()
+            if "sonuç bulunamadı" in page_content.lower() or "içerik bulunamadı" in page_content.lower():
+                warn(f"TRT Haber: '{company_name}' için sonuç bulunamadı mesajı")
+                return []
+
+            results = await self._parse_search_results(max_results, company_name)
 
             if results:
                 success(f"TRT Haber: {len(results)} sonuç bulundu")
@@ -78,14 +99,19 @@ class TRTHaberScraper(BaseNewsScraper):
             traceback.print_exc()
             return []
 
-    async def _parse_search_results(self, max_results: int) -> List[Dict]:
+    async def _parse_search_results(self, max_results: int, company_name: str = "") -> List[Dict]:
         """
         Arama sonuçlarını parse et.
 
         TRT Haber URL pattern: /haber/kategori/slug-id.html
         Örnek: /haber/ekonomi/thy-aciklama-12345.html
+
+        RELEVANCE CHECK: Başlıkta firma adı geçmeyen haberler filtrelenir.
         """
         results = []
+
+        # Firma adından keyword'ler çıkar (en az 3 karakterlik kelimeler)
+        company_keywords = [w.lower() for w in company_name.split() if len(w) >= 3]
 
         try:
             # TRT Haber linkleri - .html ile biten tüm /haber/ linkleri
@@ -138,6 +164,15 @@ class TRTHaberScraper(BaseNewsScraper):
 
                     if len(title) < 15:
                         continue  # Resim linki, atla
+
+                    # RELEVANCE CHECK: Başlıkta veya URL'de firma adı geçiyor mu?
+                    title_lower = title.lower()
+                    href_lower = href.lower()
+                    is_relevant = any(kw in title_lower or kw in href_lower for kw in company_keywords)
+
+                    if not is_relevant and company_keywords:
+                        debug(f"TRT Haber SKIP (irrelevant): {title[:50]}...")
+                        continue
 
                     url = self.BASE_URL + href if href.startswith("/") else href
 

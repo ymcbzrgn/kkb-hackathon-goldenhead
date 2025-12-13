@@ -87,8 +87,9 @@ export function CouncilContainer() {
       {/* Speech Bubbles / Transcript */}
       <div className="space-y-4 max-h-96 overflow-y-auto px-2">
         {transcript.length === 0 && !isTyping ? (
-          <div className="text-center py-8 text-gray-500">
-            <p className="animate-pulse">Komite toplanıyor...</p>
+          <div className="text-center py-8 text-gray-500 space-y-2">
+            <p className="animate-pulse text-lg">Komite toplanıyor...</p>
+            <p className="text-sm">İlk konuşmacı hazırlanıyor</p>
           </div>
         ) : (
           <>

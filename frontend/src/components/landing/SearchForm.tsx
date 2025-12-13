@@ -154,7 +154,7 @@ export function SearchForm() {
                       </div>
                       <span className="text-xs text-gray-500 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        ~10 dakika
+                        ~4 dakika
                       </span>
                     </>
                   )}

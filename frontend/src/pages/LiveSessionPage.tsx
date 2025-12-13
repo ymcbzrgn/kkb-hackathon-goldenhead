@@ -182,59 +182,61 @@ export function LiveSessionPage() {
 
         {/* Phase Indicator */}
         {(() => {
-          // Tüm agent'lar tamamlandı mı kontrol et
-          const allAgentsCompleted =
-            agents.tsg_agent?.status === 'completed' &&
-            agents.ihale_agent?.status === 'completed' &&
-            agents.news_agent?.status === 'completed';
+          // Phase'i belirle - önce report.status'a bak, sonra livePhase'e
+          const currentPhase = report.status === 'completed' ? 'completed'
+            : report.status === 'failed' ? 'failed'
+            : report.council_decision ? 'council'
+            : phase;
 
-          // Veri toplama tamamlandı = tüm agent'lar bitti VE (council'dayız VEYA tamamlandı)
-          const dataCollectionDone = allAgentsCompleted && (phase === 'council' || phase === 'completed');
+          // Veri toplama: aktif (phase=agents), tamamlandı (council veya completed aşamasındayız)
+          const isDataCollectionActive = currentPhase === 'agents';
+          const isDataCollectionDone = currentPhase === 'council' || currentPhase === 'completed';
 
-          // Komite tamamlandı = rapor tamamlandı durumunda
-          const councilDone = phase === 'completed';
+          // Komite: aktif (phase=council), tamamlandı (completed aşamasındayız)
+          const isCouncilActive = currentPhase === 'council';
+          const isCouncilDone = currentPhase === 'completed';
 
           return (
             <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
               <div className="flex items-center justify-between">
                 {/* Aşama 1: Veri Toplama */}
                 <div className={`flex-1 text-center ${
-                  phase === 'agents' ? 'text-kkb-600' :
-                  dataCollectionDone ? 'text-green-600' : 'text-gray-400'
+                  isDataCollectionActive ? 'text-kkb-600' :
+                  isDataCollectionDone ? 'text-green-600' : 'text-gray-400'
                 }`}>
                   <div className={`w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center ${
-                    phase === 'agents' ? 'bg-kkb-100 border-2 border-kkb-500' :
-                    dataCollectionDone ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100'
+                    isDataCollectionActive ? 'bg-kkb-100 border-2 border-kkb-500' :
+                    isDataCollectionDone ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100'
                   }`}>
-                    {dataCollectionDone ? '✓' : '1'}
+                    {isDataCollectionDone ? '✓' : '1'}
                   </div>
                   <span className="text-sm font-medium">Veri Toplama</span>
                 </div>
 
-                <div className={`flex-1 h-1 mx-2 ${dataCollectionDone ? 'bg-green-300' : 'bg-gray-200'}`} />
+                <div className={`flex-1 h-1 mx-2 ${isDataCollectionDone ? 'bg-green-300' : 'bg-gray-200'}`} />
 
                 {/* Aşama 2: Komite */}
                 <div className={`flex-1 text-center ${
-                  phase === 'council' ? 'text-kkb-600' :
-                  councilDone ? 'text-green-600' : 'text-gray-400'
+                  isCouncilActive ? 'text-kkb-600' :
+                  isCouncilDone ? 'text-green-600' : 'text-gray-400'
                 }`}>
                   <div className={`w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center ${
-                    phase === 'council' ? 'bg-kkb-100 border-2 border-kkb-500' :
-                    councilDone ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100'
+                    isCouncilActive ? 'bg-kkb-100 border-2 border-kkb-500' :
+                    isCouncilDone ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100'
                   }`}>
-                    {councilDone ? '✓' : '2'}
+                    {isCouncilDone ? '✓' : '2'}
                   </div>
                   <span className="text-sm font-medium">Komite</span>
                 </div>
 
-                <div className={`flex-1 h-1 mx-2 ${councilDone ? 'bg-green-300' : 'bg-gray-200'}`} />
+                <div className={`flex-1 h-1 mx-2 ${isCouncilDone ? 'bg-green-300' : 'bg-gray-200'}`} />
 
                 {/* Aşama 3: Tamamlandı */}
-                <div className={`flex-1 text-center ${phase === 'completed' ? 'text-green-600' : 'text-gray-400'}`}>
+                <div className={`flex-1 text-center ${currentPhase === 'completed' ? 'text-green-600' : 'text-gray-400'}`}>
                   <div className={`w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center ${
-                    phase === 'completed' ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100'
+                    currentPhase === 'completed' ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100'
                   }`}>
-                    {phase === 'completed' ? '✓' : '3'}
+                    {currentPhase === 'completed' ? '✓' : '3'}
                   </div>
                   <span className="text-sm font-medium">Tamamlandı</span>
                 </div>

@@ -14,7 +14,8 @@ from app.services.report_service import ReportService
 from app.services.pdf_export import PDFExportService
 from app.models.report import Report, ReportStatus
 from app.models.council_decision import AgentResult, CouncilDecision
-from app.workers.tasks import generate_report_task
+# V2: Agent-level parallelism - her agent ayrı task, work-stealing
+from app.workers.agent_tasks import generate_report_task_v2
 
 
 class ReportCreateRequest(BaseModel):
@@ -65,8 +66,9 @@ async def create_report(
         company_tax_no=request.company_tax_no
     )
 
-    # Celery task başlat
-    generate_report_task.delay(
+    # V2: Agent-level parallelism - 3 agent task paralel başlar
+    # Bir agent bitince worker diğer raporların agent'larını alabilir
+    generate_report_task_v2.delay(
         report_id=str(report.id),
         company_name=request.company_name,
         demo_mode=request.demo_mode
@@ -167,9 +169,10 @@ async def get_report(
     # Rapor detayı dönüş
     report_data = report.to_dict()
 
-    # Agent sonuçları ekle (frontend tsg, ihale, news bekliyor - _agent suffix'i kaldır)
+    # Agent sonuçları ekle (frontend tsg, ihale, news bekliyor)
     # Frontend status, duration_seconds ve data bekliyor
     if report.agent_results:
+        # agent_results tablosundan al (eski yöntem)
         report_data["agent_results"] = {
             result.agent_id.replace("_agent", ""): {
                 "status": result.status,
@@ -181,6 +184,53 @@ async def get_report(
             }
             for result in report.agent_results
         }
+    else:
+        # FALLBACK: agent_results tablosu boşsa, JSONB alanlarından oluştur
+        # Celery task'lar veriyi tsg_data, ihale_data, news_data'ya kaydediyor
+        report_data["agent_results"] = {}
+
+        # TSG
+        if report.tsg_data:
+            report_data["agent_results"]["tsg"] = {
+                "status": report.tsg_data.get("status", "completed") if isinstance(report.tsg_data, dict) else "completed",
+                "duration_seconds": None,
+                "data": report.tsg_data,
+                "summary": None,
+                "key_findings": [],
+                "warning_flags": []
+            }
+
+        # İhale
+        if report.ihale_data:
+            ihale_status = "completed"
+            if isinstance(report.ihale_data, dict):
+                if report.ihale_data.get("timeout"):
+                    ihale_status = "completed"  # partial data var
+                elif report.ihale_data.get("hata"):
+                    ihale_status = "failed"
+            report_data["agent_results"]["ihale"] = {
+                "status": ihale_status,
+                "duration_seconds": None,
+                "data": report.ihale_data,
+                "summary": None,
+                "key_findings": [],
+                "warning_flags": ["TIMEOUT"] if isinstance(report.ihale_data, dict) and report.ihale_data.get("timeout") else []
+            }
+
+        # News
+        if report.news_data:
+            news_status = "completed"
+            if isinstance(report.news_data, dict):
+                if report.news_data.get("timeout"):
+                    news_status = "completed"  # partial data var
+            report_data["agent_results"]["news"] = {
+                "status": news_status,
+                "duration_seconds": None,
+                "data": report.news_data,
+                "summary": None,
+                "key_findings": [],
+                "warning_flags": ["TIMEOUT"] if isinstance(report.news_data, dict) and report.news_data.get("timeout") else []
+            }
 
     # Council kararı ekle (frontend beklentilerine uygun format)
     if report.council_decision:

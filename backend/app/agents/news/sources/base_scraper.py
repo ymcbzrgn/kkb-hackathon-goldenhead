@@ -252,12 +252,37 @@ class BaseNewsScraper(ABC):
             warn(f"Screenshot capture hatası: {e}")
             return None
     
-    async def search_and_fetch(self, company_name: str, max_articles: int = 3) -> List[Dict]:
+    async def search_and_fetch(self, company_name: str, max_articles: int = 3, skip_details: bool = False) -> List[Dict]:
+        """
+        Haber ara ve detaylarını getir.
+
+        Args:
+            company_name: Firma adı
+            max_articles: Maksimum haber sayısı
+            skip_details: True ise LLM extraction atlanır (DEMO MODE için hızlı)
+        """
         try:
             results = await self.search(company_name, max_results=max_articles)
             if not results:
                 return []
-            
+
+            # DEMO MODE: LLM extraction atla, sadece search sonuçlarını döndür
+            if skip_details:
+                articles = []
+                for result in results[:max_articles]:
+                    articles.append({
+                        "title": result.get("title", ""),
+                        "url": result.get("url", ""),
+                        "date": result.get("date", "unknown"),
+                        "text": result.get("snippet", ""),
+                        "source": self.name,
+                        "id": str(uuid.uuid4())[:8],
+                        "screenshot_path": None  # Screenshot yok (hızlı mod)
+                    })
+                log(f"[{self.name}] {len(articles)} haber bulundu (skip_details=True)")
+                return articles
+
+            # FULL MODE: Her haber için detay çek (LLM extraction)
             articles = []
             for result in results[:max_articles]:
                 detail = await self.get_article_detail(result['url'])
@@ -265,7 +290,7 @@ class BaseNewsScraper(ABC):
                     detail['source'] = self.name
                     detail['search_snippet'] = result.get('snippet', '')
                     articles.append(detail)
-            
+
             return articles
         except Exception as e:
             error(f"search_and_fetch error: {e}")

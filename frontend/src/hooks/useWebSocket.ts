@@ -127,6 +127,11 @@ export function useWebSocket({
         break;
 
       case 'council_speaker_changed':
+        // Önceki konuşmayı tamamla (eğer devam ediyorsa)
+        // Bu sayede transcript'e eklenir ve yeni speaker başlar
+        if (useCouncilStore.getState().isTyping) {
+          completeSpeech(undefined);
+        }
         changeSpeaker({
           id: event.payload.speaker_id,
           name: event.payload.speaker_name,

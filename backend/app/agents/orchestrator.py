@@ -67,9 +67,9 @@ class Orchestrator:
         print(f"[ORCHESTRATOR] Report {report_id}: Demo Mode = {self.demo_mode}")
 
         # Agent'ları oluştur - primary ve fallback ayrı
-        # TSG Agent (K8s primary, local fallback)
+        # TSG Agent (K8s primary, local fallback) - demo_mode ile
         self.tsg_agent_k8s = TSGAgentK8s() if USE_K8S_TSG_AGENT else None
-        self.tsg_agent_local = TSGAgent()
+        self.tsg_agent_local = TSGAgent(demo_mode=self.demo_mode)
 
         # Ihale Agent (K8s primary, local fallback)
         # Demo mode'da 7 gün, normal modda 90 gün tarama
@@ -278,8 +278,22 @@ class Orchestrator:
         start_time = datetime.utcnow()
 
         # Job başladı event'i
-        # Demo mode: 10 dakika, Normal: 40 dakika
-        estimated_duration = 600 if self.demo_mode else 2400
+        # ============================================
+        # DEMO MODE: TOPLAM 4 dakika HARD LIMIT (tüm ajanlar dahil)
+        # FULL MODE: Sınırsız araştırma, sonra council
+        # ============================================
+        # DEMO: TSG 90s, News+İhale 150s (paralel) = TOPLAM MAX 240s
+        estimated_duration = 240 if self.demo_mode else 3600  # Demo: 4dk, Full: 1 saat
+        TOTAL_AGENT_LIMIT = 240 if self.demo_mode else 3600  # TOPLAM agent süresi
+        TSG_TIMEOUT = 90 if self.demo_mode else 240  # Demo: 1.5dk, Full: 4dk
+        PARALLEL_TIMEOUT = 150 if self.demo_mode else 3360  # Demo: 2.5dk, Full: 56dk
+
+        # Global timer başlat
+        agent_start_time = datetime.utcnow()
+
+        print(f"[ORCHESTRATOR] Mode: {'DEMO (4dk TOPLAM limit)' if self.demo_mode else 'FULL (sınırsız)'}")
+        print(f"[ORCHESTRATOR] TSG Timeout: {TSG_TIMEOUT}s, Parallel Timeout: {PARALLEL_TIMEOUT}s")
+
         await self._send_event("job_started", {
             "report_id": self.report_id,
             "company_name": company_name,
@@ -287,7 +301,8 @@ class Orchestrator:
         })
 
         # ============================================
-        # AŞAMA 1: TSG Agent'ı ÖNCE çalıştır (2 dk timeout)
+        # AŞAMA 1: TSG Agent'ı ÖNCE çalıştır
+        # Demo: 90s timeout, Full: 240s timeout
         # Firma ünvanı bulunursa diğer agentlar bu ünvanı kullanır
         # ============================================
 
@@ -298,8 +313,6 @@ class Orchestrator:
             "agent_description": "Firma ünvanı aranıyor..."
         })
 
-        # TSG Agent'ı 2 dakika (120 saniye) timeout ile çalıştır
-        TSG_TIMEOUT = 120  # 2 dakika
         print(f"[ORCHESTRATOR] TSG Agent başlıyor (timeout: {TSG_TIMEOUT}s) - Firma ünvanı aranıyor...")
 
         tsg_result = None
@@ -330,10 +343,10 @@ class Orchestrator:
                     print(f"[ORCHESTRATOR] ⚠️ TSG başarısız veya veri yok, orijinal isim kullanılacak: '{company_name}'")
             else:
                 # Timeout
-                print(f"[ORCHESTRATOR] ⚠️ TSG 2 dakika içinde tamamlanamadı, iptal ediliyor...")
+                print(f"[ORCHESTRATOR] ⚠️ TSG {TSG_TIMEOUT}s içinde tamamlanamadı, iptal ediliyor...")
                 tsg_task.cancel()
                 await asyncio.gather(tsg_task, return_exceptions=True)
-                tsg_result = AgentResult(agent_id="tsg_agent", status="failed", error="Timeout - 2 dakika içinde tamamlanamadı")
+                tsg_result = AgentResult(agent_id="tsg_agent", status="failed", error=f"Timeout - {TSG_TIMEOUT}s içinde tamamlanamadı")
                 print(f"[ORCHESTRATOR] Orijinal isim kullanılacak: '{company_name}'")
 
         except Exception as e:
@@ -376,9 +389,14 @@ class Orchestrator:
                 "agent_description": f"{agent_name} başlatılıyor - Firma: {resolved_company_name}"
             })
 
-        # Demo modda maksimum 10 dakika (600 saniye), normal modda 40 dakika (2400 saniye)
-        agent_timeout = 600 if self.demo_mode else 2400
-        print(f"[ORCHESTRATOR] Agent timeout: {agent_timeout}s ({'demo' if self.demo_mode else 'normal'} mode)")
+        # ============================================
+        # Demo modda: Kalan süreyi hesapla (toplam 4dk'dan TSG süresi çıkar)
+        # Full modda: PARALLEL_TIMEOUT kullan
+        # ============================================
+        elapsed_since_start = (datetime.utcnow() - agent_start_time).total_seconds()
+        remaining_time = max(30, TOTAL_AGENT_LIMIT - elapsed_since_start)  # Min 30s
+        agent_timeout = min(PARALLEL_TIMEOUT, remaining_time) if self.demo_mode else PARALLEL_TIMEOUT
+        print(f"[ORCHESTRATOR] Agent timeout: {agent_timeout:.0f}s (elapsed: {elapsed_since_start:.0f}s, remaining: {remaining_time:.0f}s)")
 
         # Task'ları oluştur - resolved_company_name ile
         ihale_task = asyncio.create_task(self._run_ihale_with_fallback(resolved_company_name))
@@ -462,6 +480,11 @@ class Orchestrator:
         # ============================================
         # AŞAMA 3: Council Toplantısı
         # ============================================
+
+        # Toplam agent süresi logu
+        total_agent_time = (datetime.utcnow() - agent_start_time).total_seconds()
+        print(f"[ORCHESTRATOR] ✅ Tüm ajanlar tamamlandı! Toplam agent süresi: {total_agent_time:.1f}s")
+        print(f"[ORCHESTRATOR] Council toplantısı başlıyor...")
 
         council_result = await self.council_service.run_meeting(
             company_name=company_name,

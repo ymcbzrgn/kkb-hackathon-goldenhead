@@ -1072,13 +1072,16 @@ class TSGScraper:
         """
         step("ILAN GRUPLAMA (v4.0)")
 
+        # v9.4: Genişletilmiş ilan tip kategorileri
         TYPE_KEYWORDS = {
-            "KURULUS": ["kuruluş", "kurulus", "tescil", "kurulu", "ana sözleşme", "ana sozlesme"],
-            "YONETIM": ["yönetim", "yonetim", "yönetici", "yonetici", "müdür", "mudur", "temsil", "imza", "yetki"],
-            "SERMAYE": ["sermaye", "pay devri", "ortaklık", "ortaklik", "hisse"],
+            "KURULUS": ["kuruluş", "kurulus", "tescil", "kurulu", "ana sözleşme", "ana sozlesme", "birleşme", "birlesme", "devir"],
+            "YONETIM": ["yönetim", "yonetim", "yönetici", "yonetici", "müdür", "mudur", "temsil", "imza", "yetki", "atama"],
+            "SERMAYE": ["sermaye", "pay devri", "ortaklık", "ortaklik", "hisse", "artırım", "artirim", "azaltım", "azaltim"],
+            "GENEL_KURUL": ["genel kurul", "olağan", "olagan", "olağanüstü", "olaganüstü", "toplantı", "toplanti"],
+            "TESCIL": ["değişiklik", "degisiklik", "tadil", "düzeltme", "duzeltme", "güncelleme", "guncelleme"],
         }
 
-        groups = {"KURULUS": [], "YONETIM": [], "SERMAYE": [], "DIGER": []}
+        groups = {"KURULUS": [], "YONETIM": [], "SERMAYE": [], "GENEL_KURUL": [], "TESCIL": [], "DIGER": []}
 
         # Turkce karakterleri normalize et
         def normalize_tr(text: str) -> str:
@@ -1115,6 +1118,8 @@ class TSGScraper:
         log(f"Gruplama sonucu: KURULUS={len(groups['KURULUS'])}, "
             f"YONETIM={len(groups['YONETIM'])}, "
             f"SERMAYE={len(groups['SERMAYE'])}, "
+            f"GENEL_KURUL={len(groups['GENEL_KURUL'])}, "
+            f"TESCIL={len(groups['TESCIL'])}, "
             f"DIGER={len(groups['DIGER'])}")
 
         return groups

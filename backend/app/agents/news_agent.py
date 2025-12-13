@@ -15,6 +15,7 @@ HACKATHON GEREKSİNİMLERİ:
 - Diğer: NTV, Sözcü
 """
 import asyncio
+import time
 from typing import Optional, List, Dict, Tuple
 from datetime import datetime
 
@@ -57,17 +58,24 @@ class NewsAgent(BaseAgent):
     - Diğer: NTV, Sözcü
     """
 
-    # Default parametreler (demo_mode=False için)
-    DEFAULT_MAX_ARTICLES_PER_SOURCE = 15  # 3 yıllık derinlik için artırıldı
-    DEFAULT_SCRAPER_TIMEOUT = 180  # Daha kısa timeout, paralel telafi eder
-    DEFAULT_MAX_CONCURRENT_SCRAPERS = 7  # 10 kaynağın 7'si aynı anda
-    DEFAULT_YEARS_BACK = 3  # 3 yıllık tarama
+    # ============================================
+    # FULL MODE: Sınırsız süre, MAX araştırma
+    # ============================================
+    DEFAULT_MAX_ARTICLES_PER_SOURCE = 50  # Her kaynaktan MAX 50 haber
+    DEFAULT_SCRAPER_TIMEOUT = 600         # Her kaynak için 10 dk (sınırsız)
+    DEFAULT_MAX_CONCURRENT_SCRAPERS = 10  # Tüm kaynaklar paralel
+    DEFAULT_YEARS_BACK = 10               # 10 yıllık tarama (çok kapsamlı)
+    DEFAULT_MAX_EXECUTION_TIME = 3600     # 1 saat - FULL MODE
 
-    # Demo mode parametreleri
-    DEMO_MAX_ARTICLES_PER_SOURCE = 5
-    DEMO_SCRAPER_TIMEOUT = 120
-    DEMO_MAX_CONCURRENT_SCRAPERS = 5
-    DEMO_YEARS_BACK = 1
+    # ============================================
+    # DEMO MODE: 140 saniye (4 dakika toplam limit için margin bırak)
+    # Paralel çalışır, TSG'den sonra başlar
+    # ============================================
+    DEMO_MAX_ARTICLES_PER_SOURCE = 5      # Kaynak başına 5 haber (LLM extraction yok, hızlı)
+    DEMO_SCRAPER_TIMEOUT = 45             # Her kaynak 45s (LLM yok, sadece arama)
+    DEMO_MAX_CONCURRENT_SCRAPERS = 10     # Tüm kaynaklar paralel (hızlı)
+    DEMO_YEARS_BACK = 2                   # 2 yıl geriye
+    DEMO_MAX_EXECUTION_TIME = 90          # 1.5 dakika yeterli (LLM extraction yok)
 
     def __init__(self, demo_mode: bool = False):
         super().__init__(
@@ -78,29 +86,74 @@ class NewsAgent(BaseAgent):
         self.llm = LLMClient()
         self.demo_mode = demo_mode
 
+        # Partial results - timeout durumunda kullanılacak
+        self._partial_results = {
+            "haberler": [],
+            "kaynak_sayisi": 0,
+            "toplam_haber": 0
+        }
+
         # Demo/Normal mode'a göre parametreleri ayarla
         if demo_mode:
             self.MAX_ARTICLES_PER_SOURCE = self.DEMO_MAX_ARTICLES_PER_SOURCE
             self.SCRAPER_TIMEOUT = self.DEMO_SCRAPER_TIMEOUT
             self.MAX_CONCURRENT_SCRAPERS = self.DEMO_MAX_CONCURRENT_SCRAPERS
             self.YEARS_BACK = self.DEMO_YEARS_BACK
+            self.max_execution_time = self.DEMO_MAX_EXECUTION_TIME
         else:
             self.MAX_ARTICLES_PER_SOURCE = self.DEFAULT_MAX_ARTICLES_PER_SOURCE
             self.SCRAPER_TIMEOUT = self.DEFAULT_SCRAPER_TIMEOUT
             self.MAX_CONCURRENT_SCRAPERS = self.DEFAULT_MAX_CONCURRENT_SCRAPERS
             self.YEARS_BACK = self.DEFAULT_YEARS_BACK
+            self.max_execution_time = self.DEFAULT_MAX_EXECUTION_TIME
 
-        print(f"[NEWS AGENT] Mode: {'DEMO' if demo_mode else 'FULL'}, Articles/Source: {self.MAX_ARTICLES_PER_SOURCE}, Years: {self.YEARS_BACK}")
+        print(f"[NEWS AGENT] Mode: {'DEMO' if demo_mode else 'FULL'}, Articles/Source: {self.MAX_ARTICLES_PER_SOURCE}, Years: {self.YEARS_BACK}, MaxTime: {self.max_execution_time}s")
 
     async def run(self, company_name: str) -> AgentResult:
-        """Haberleri topla ve analiz et"""
+        """Haberleri topla ve analiz et - timeout wrapper ile"""
+        step(f"NEWS AGENT BASLIYOR: {company_name} (max {self.max_execution_time}s)")
 
-        step(f"NEWS AGENT BASLIYOR: {company_name}")
+        try:
+            # Timeout wrapper - max_execution_time sonunda otomatik dur
+            return await asyncio.wait_for(
+                self._run_internal(company_name),
+                timeout=self.max_execution_time
+            )
+        except asyncio.TimeoutError:
+            error(f"News Agent TIMEOUT! ({self.max_execution_time}s)")
+            return self._create_timeout_result(company_name)
+        except Exception as e:
+            error(f"News Agent HATA: {e}")
+            return AgentResult(
+                agent_id=self.agent_id,
+                status="failed",
+                error=str(e),
+                duration_seconds=self.max_execution_time
+            )
+
+    async def _run_internal(self, company_name: str) -> AgentResult:
+        """Internal run method - timeout wrapper tarafından çağrılır."""
+        start_time = time.time()
+
+        # Reset partial results
+        self._partial_results = {
+            "firma_adi": company_name,
+            "haberler": [],
+            "kaynak_sayisi": 0,
+            "toplam_haber": 0,
+            "analyzed_news": []
+        }
+
         self.report_progress(5, "Haberler aranıyor...")
 
         try:
             # 1. Haber ara (7 kaynaktan paralel)
             news_items = await self._search_news(company_name)
+
+            # Update partial results
+            self._partial_results["haberler"] = news_items
+            self._partial_results["toplam_haber"] = len(news_items)
+
             self.report_progress(40, f"{len(news_items)} haber bulundu")
 
             if not news_items:
@@ -111,7 +164,8 @@ class NewsAgent(BaseAgent):
                     data={"message": "Haber bulunamadı", "toplam_haber": 0},
                     summary="Firma hakkında güncel haber bulunamadı",
                     key_findings=["Medya görünürlüğü düşük"],
-                    warning_flags=[]
+                    warning_flags=[],
+                    duration_seconds=int(time.time() - start_time)
                 )
 
             # 2. HACKATHON: Tarih filtresi (2022-2025)
@@ -122,36 +176,43 @@ class NewsAgent(BaseAgent):
             # 3. HACKATHON: Relevance validation (LLM ile tek tek)
             self.report_progress(50, "Relevance doğrulaması yapılıyor...")
             news_items = await self._validate_all_articles(news_items, company_name)
-            log(f"Relevance validation sonrası: {len(news_items)} haber")
+            relevant_count = sum(1 for a in news_items if a.get('is_relevant', False))
+            log(f"Relevance validation sonrası: {len(news_items)} haber ({relevant_count} relevant)")
 
             if not news_items:
-                warn(f"'{company_name}' için ilgili haber bulunamadı")
+                warn(f"'{company_name}' için haber bulunamadı")
                 return AgentResult(
                     agent_id=self.agent_id,
                     status="completed",
-                    data={"message": "İlgili haber bulunamadı", "toplam_haber": 0},
-                    summary="Firma hakkında ilgili haber bulunamadı",
-                    key_findings=["Medya görünürlüğü düşük veya irrelevant haberler filtrelendi"],
-                    warning_flags=[]
+                    data={"message": "Haber bulunamadı", "toplam_haber": 0},
+                    summary="Firma hakkında haber bulunamadı",
+                    key_findings=["Medya görünürlüğü düşük"],
+                    warning_flags=[],
+                    duration_seconds=int(time.time() - start_time)
                 )
 
             # 4. Sentiment analizi
             self.report_progress(70, "Sentiment analizi yapılıyor...")
             analyzed_news = await self._analyze_sentiment(news_items)
 
+            # Update partial results with analyzed news
+            self._partial_results["analyzed_news"] = analyzed_news
+
             # 5. Sonuçları derle (HACKATHON formatında)
             self.report_progress(90, "Veriler derleniyor...")
             result_data = self._compile_results(analyzed_news)
             self.report_progress(100, "Haber analizi tamamlandı")
 
-            success(f"NEWS AGENT TAMAMLANDI: {len(news_items)} haber")
+            duration = int(time.time() - start_time)
+            success(f"NEWS AGENT TAMAMLANDI: {len(news_items)} haber ({duration}s)")
             return AgentResult(
                 agent_id=self.agent_id,
                 status="completed",
                 data=result_data,
                 summary=self._generate_summary(result_data),
                 key_findings=self._extract_key_findings(result_data),
-                warning_flags=self._extract_warnings(result_data)
+                warning_flags=self._extract_warnings(result_data),
+                duration_seconds=duration
             )
 
         except Exception as e:
@@ -161,8 +222,73 @@ class NewsAgent(BaseAgent):
             return AgentResult(
                 agent_id=self.agent_id,
                 status="failed",
-                error=str(e)
+                error=str(e),
+                duration_seconds=int(time.time() - start_time)
             )
+
+    def _create_timeout_result(self, company_name: str) -> AgentResult:
+        """
+        Timeout durumunda döndürülecek sonuç - PARTIAL DATA dahil.
+        Timeout olsa bile o ana kadar bulunan haberleri kaydet.
+        """
+        partial = self._partial_results
+        haberler = partial.get("haberler", [])
+        analyzed = partial.get("analyzed_news", [])
+        toplam = len(haberler)
+
+        warn(f"Timeout - Partial data: {toplam} haber bulundu, {len(analyzed)} analiz edildi")
+
+        # Analiz edilmiş haberler varsa onları kullan, yoksa ham haberleri normalize et
+        if analyzed:
+            final_haberler = analyzed
+        else:
+            # Ham haberleri frontend formatına çevir (title->baslik, source->kaynak, etc.)
+            final_haberler = [
+                {
+                    "baslik": h.get("title", h.get("baslik", "Başlık yok")),
+                    "kaynak": h.get("source", h.get("kaynak", "Bilinmiyor")),
+                    "tarih": h.get("date_display", h.get("date", h.get("tarih", "Tarih bilinmiyor"))),
+                    "url": h.get("url", ""),
+                    "metin": (h.get("text", h.get("metin", ""))[:2000] if h.get("text") or h.get("metin") else ""),
+                    "sentiment": h.get("sentiment", "belirsiz"),
+                    "is_relevant": h.get("is_relevant", True),
+                    "relevance_confidence": h.get("relevance_confidence", 0.5)
+                }
+                for h in haberler[:20]  # Max 20 haber
+            ]
+
+        # Basit sentiment hesapla (analiz edilmişse)
+        olumlu = sum(1 for h in final_haberler if h.get("sentiment") in ["pozitif", "olumlu"])
+        olumsuz = sum(1 for h in final_haberler if h.get("sentiment") in ["negatif", "olumsuz"])
+
+        result_data = {
+            "firma_adi": company_name,
+            "toplam_haber": toplam,
+            "haberler": final_haberler,
+            "timeout": True,
+            "timeout_mesaj": f"Tarama {self.max_execution_time}s'de timeout oldu",
+            "ozet": {
+                "toplam": toplam,
+                "olumlu": olumlu,
+                "olumsuz": olumsuz,
+                "sentiment_score": (olumlu - olumsuz) / max(len(analyzed), 1) if analyzed else 0,
+                "trend": "olumlu" if olumlu > olumsuz else ("olumsuz" if olumsuz > olumlu else "notr")
+            }
+        }
+
+        return AgentResult(
+            agent_id=self.agent_id,
+            status="completed",
+            data=result_data,
+            summary=f"Kısmi tarama: {toplam} haber bulundu (timeout, {len(analyzed)} analiz edildi)",
+            key_findings=[
+                f"Bulunan haber: {toplam}",
+                f"Analiz edilen: {len(analyzed)}",
+                "Tarama timeout nedeniyle tamamlanamadı"
+            ],
+            warning_flags=["KISMI_TARAMA", "TIMEOUT"],
+            duration_seconds=self.max_execution_time
+        )
 
     async def _search_news(self, company_name: str) -> List[Dict]:
         """
@@ -170,6 +296,7 @@ class NewsAgent(BaseAgent):
 
         Her kaynak bağımsız çalışır, biri fail olsa da diğerleri devam eder.
         Semaphore ile max 3 concurrent scraper çalışır.
+        INCREMENTAL: Her scraper bittiğinde partial_results güncellenir.
         """
         log(f"7 kaynaktan paralel arama başlıyor (max {self.MAX_CONCURRENT_SCRAPERS} concurrent): '{company_name}'")
 
@@ -186,36 +313,47 @@ class NewsAgent(BaseAgent):
                 try:
                     async with scraper_class() as scraper:
                         debug(f"[{scraper.name}] Arama başlıyor...")
+                        # DEMO MODE: skip_details=True ile LLM extraction atlanır (hızlı)
                         results = await asyncio.wait_for(
-                            scraper.search_and_fetch(company_name, max_articles=self.MAX_ARTICLES_PER_SOURCE),
+                            scraper.search_and_fetch(
+                                company_name,
+                                max_articles=self.MAX_ARTICLES_PER_SOURCE,
+                                skip_details=self.demo_mode  # Demo'da LLM extraction atla
+                            ),
                             timeout=self.SCRAPER_TIMEOUT
                         )
                         if results:
                             success(f"[{scraper.name}] {len(results)} haber bulundu")
-                            return results
+                            # Source ekle
+                            for article in results:
+                                article['source'] = scraper.name
+                            return (scraper.name, results)
                         else:
                             warn(f"[{scraper.name}] Haber bulunamadı")
-                            return []
+                            return (scraper.name, [])
                 except asyncio.TimeoutError:
                     warn(f"[{scraper_class.NAME}] Timeout ({self.SCRAPER_TIMEOUT}s)")
-                    return []
+                    return (scraper_class.NAME, [])
                 except Exception as e:
                     error(f"[{scraper_class.NAME}] Hata: {e}")
-                    return []
+                    return (scraper_class.NAME, [])
 
-        # Tüm scraper'ları paralel çalıştır (semaphore ile kontrollü)
+        # Tüm scraper'ları paralel çalıştır (as_completed ile incremental güncelleme)
         tasks = [scrape_source_with_limit(sc) for sc in scraper_classes]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Sonuçları birleştir
-        for i, result in enumerate(results):
-            scraper_name = scraper_classes[i].NAME
-            if isinstance(result, Exception):
-                error(f"[{scraper_name}] Exception: {result}")
-            elif isinstance(result, list):
-                for article in result:
-                    article['source'] = scraper_name
-                all_articles.extend(result)
+        # as_completed ile her scraper bittiğinde partial_results güncelle
+        for coro in asyncio.as_completed(tasks):
+            try:
+                scraper_name, results = await coro
+                if results:
+                    all_articles.extend(results)
+                    # INCREMENTAL: Partial results güncelle (timeout durumunda kullanılacak)
+                    self._partial_results["haberler"] = all_articles.copy()
+                    self._partial_results["toplam_haber"] = len(all_articles)
+                    self._partial_results["kaynak_sayisi"] = len(set(a.get('source', '') for a in all_articles))
+                    log(f"[INCREMENTAL] {scraper_name} tamamlandı, toplam: {len(all_articles)} haber")
+            except Exception as e:
+                error(f"Scraper task hatası: {e}")
 
         log(f"Toplam {len(all_articles)} haber bulundu (7 kaynaktan)")
         return all_articles
@@ -364,18 +502,19 @@ Cevap:"""
             batch_results = await self._batch_validate_relevance(batch, company_name)
 
             for article, (is_relevant, confidence) in zip(batch, batch_results):
-                if is_relevant:
-                    article['relevance_confidence'] = round(confidence, 2)
-                    validated.append(article)
-                    debug(f"Relevance ACCEPTED: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
-                else:
-                    debug(f"Relevance REJECTED: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
+                # TÜM HABERLERİ TUT - filtreleme yapma, sadece confidence ekle
+                article['relevance_confidence'] = round(confidence, 2)
+                article['is_relevant'] = is_relevant
+                validated.append(article)
+                status = "RELEVANT" if is_relevant else "LOW_CONF"
+                debug(f"Relevance {status}: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
 
             # Progress update
             progress = 50 + int((batch_start + len(batch)) / len(articles) * 20)
             self.report_progress(min(progress, 70), f"Relevance: {batch_start + len(batch)}/{len(articles)}")
 
-        log(f"Batch validation tamamlandı: {len(validated)}/{len(articles)} haber geçti")
+        relevant_count = sum(1 for a in validated if a.get('is_relevant', False))
+        log(f"Batch validation tamamlandı: {len(validated)} haber ({relevant_count} relevant, {len(validated)-relevant_count} low-conf)")
         return validated
 
     async def _batch_validate_relevance(self, articles: List[Dict], company_name: str) -> List[Tuple[bool, float]]:
@@ -685,7 +824,8 @@ Her haber için SADECE "olumlu" veya "olumsuz" yaz. Satır numarasını kullan.
                     "metin": a.get("text", "")[:2000] if a.get("text") else "",  # İlk 2000 karakter
                     "sentiment": a.get("sentiment", "olumsuz"),
                     "screenshot_path": a.get("screenshot_path", None),
-                    "relevance_confidence": a.get("relevance_confidence", 0.5)
+                    "relevance_confidence": a.get("relevance_confidence", 0.5),
+                    "is_relevant": a.get("is_relevant", True)
                 }
                 for a in analyzed_news
             ],

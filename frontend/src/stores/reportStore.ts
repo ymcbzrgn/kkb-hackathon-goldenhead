@@ -77,6 +77,7 @@ export const useReportStore = create<ReportState>((set) => ({
         risk_level: null,
         decision: null,
         created_at: new Date().toISOString(),
+        started_at: new Date().toISOString(),
         completed_at: null,
         duration_seconds: null,
         agent_results: {

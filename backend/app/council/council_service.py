@@ -24,11 +24,11 @@ print(f"[COUNCIL] Default Demo Mode: {'ENABLED - Kısaltılmış toplantı' if D
 
 # Council speech pacing - insan okuma hizinda streaming
 # Not: Bu değerler DEFAULT_DEMO_MODE için, per-request demo_mode için __init__'de ayarlanır
-SPEECH_CHUNK_DELAY_MS_DEMO = 5  # Demo mode
+SPEECH_CHUNK_DELAY_MS_DEMO = 15  # Demo mode - 3x yavaş (2 dk toplantı için)
 SPEECH_CHUNK_DELAY_MS_NORMAL = 30  # Normal mode
-SPEECH_MIN_BUFFER_SIZE_DEMO = 10
+SPEECH_MIN_BUFFER_SIZE_DEMO = 8  # Demo mode - daha sık emit
 SPEECH_MIN_BUFFER_SIZE_NORMAL = 6
-SPEECH_MAX_BUFFER_TIME_DEMO = 0.02
+SPEECH_MAX_BUFFER_TIME_DEMO = 0.04  # Demo mode - daha uzun buffer
 SPEECH_MAX_BUFFER_TIME_NORMAL = 0.08
 
 
@@ -61,13 +61,28 @@ class CouncilService:
             self.speech_min_buffer_size = SPEECH_MIN_BUFFER_SIZE_NORMAL
             self.speech_max_buffer_time = SPEECH_MAX_BUFFER_TIME_NORMAL
 
-        print(f"[COUNCIL] Report {report_id}: Demo Mode = {self.demo_mode}")
+        # Speech timeout: demo modda 30s, normal modda 90s per speech
+        self.speech_timeout = 30 if self.demo_mode else 90
+
+        print(f"[COUNCIL] Report {report_id}: Demo Mode = {self.demo_mode}, Speech Timeout = {self.speech_timeout}s")
 
     async def _stream_speech_with_pacing(self, member_id: str, llm_stream) -> str:
         """
         Konusmayi insan okuma hizinda stream et.
         LLM chunk'larini buffer'layip duzgun araliklarda gonderir.
+        Timeout ile koruma altında.
         """
+        try:
+            return await asyncio.wait_for(
+                self._stream_speech_internal(member_id, llm_stream),
+                timeout=self.speech_timeout
+            )
+        except asyncio.TimeoutError:
+            print(f"[COUNCIL] Speech timeout ({self.speech_timeout}s) for {member_id}")
+            return f"[Konuşma {self.speech_timeout} saniye içinde tamamlanamadı]"
+
+    async def _stream_speech_internal(self, member_id: str, llm_stream) -> str:
+        """Internal streaming - timeout wrapper tarafından çağrılır."""
         full_response = ""
         buffer = ""
         last_emit_time = asyncio.get_event_loop().time()
@@ -288,7 +303,7 @@ Bugün {company_name} firmasını değerlendireceğiz.
 
 {intel_summary}
 
-Lütfen toplantıyı KISA açın (1-2 cümle). Hemen üyelere söz verin.
+Lütfen toplantıyı açın (2-3 cümle). Firma hakkında kısa bir ön bilgi verin ve üyelere söz verin.
 """
 
         opening_response = await self._stream_speech_with_pacing(
@@ -341,16 +356,17 @@ Lütfen toplantıyı KISA açın (1-2 cümle). Hemen üyelere söz verin.
                 "speaker_emoji": member.emoji
             })
 
-            # Kısa değerlendirme prompt'u
+            # Değerlendirme prompt'u (2 dk toplantı için optimize)
             member_prompt = f"""
 {company_name} firmasını uzmanlık alanınız ({member.role}) açısından değerlendirin.
 
 === VERİLER ===
 {formatted_data}
 
-GÖREV: KISA değerlendirme yapın:
-- 2-3 cümle analiz
+GÖREV: Değerlendirme yapın:
+- 3-4 cümle detaylı analiz (güçlü/zayıf yönler)
 - Risk skoru (0-100, 0=güvenli, 100=riskli)
+- Kısa gerekçe
 
 SKOR FORMATI: [SKOR: XX]
 """
@@ -434,7 +450,10 @@ Risk seviyesi: {risk_level}
 Karar: {decision}
 Konsensüs: %{consensus * 100:.0f}
 
-KISA özet yapın (2-3 cümle) ve kararı açıklayın.
+Özet yapın (3-4 cümle):
+- Kararı ve gerekçesini açıklayın
+- Varsa koşulları belirtin
+- Sonraki adımları önerin
 """
 
         final_response = await self._stream_speech_with_pacing(

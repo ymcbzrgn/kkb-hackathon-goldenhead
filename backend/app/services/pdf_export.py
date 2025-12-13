@@ -17,6 +17,24 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 class PDFExportService:
     """PDF export servis sınıfı"""
 
+    # Türkçe -> ASCII karakter haritası
+    TR_CHAR_MAP = {
+        'ı': 'i', 'İ': 'I', 'ğ': 'g', 'Ğ': 'G',
+        'ü': 'u', 'Ü': 'U', 'ş': 's', 'Ş': 'S',
+        'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C',
+    }
+
+    @classmethod
+    def _sanitize_text(cls, text) -> str:
+        """Türkçe karakterleri ASCII'ye çevir - PDF uyumluluğu için"""
+        if text is None:
+            return ""
+        if not isinstance(text, str):
+            text = str(text)
+        for tr_char, ascii_char in cls.TR_CHAR_MAP.items():
+            text = text.replace(tr_char, ascii_char)
+        return text
+
     # Risk renk kodları
     RISK_COLORS = {
         "dusuk": colors.green,
@@ -145,8 +163,8 @@ class PDFExportService:
 
         # Firma bilgileri tablosu
         company_data = [
-            ["Firma Adi:", report_data.get('company_name', 'Bilinmiyor')],
-            ["Vergi No:", report_data.get('company_tax_no', '-')],
+            ["Firma Adi:", self._sanitize_text(report_data.get('company_name', 'Bilinmiyor'))],
+            ["Vergi No:", self._sanitize_text(report_data.get('company_tax_no', '-'))],
             ["Rapor Tarihi:", self._format_datetime(report_data.get('created_at'))],
         ]
 
@@ -235,7 +253,7 @@ class PDFExportService:
         if report_data.get('decision_summary'):
             elements.append(Spacer(1, 0.3*cm))
             summary_text = Paragraph(
-                f"<b>Karar Ozeti:</b> {report_data.get('decision_summary')}",
+                f"<b>Karar Ozeti:</b> {self._sanitize_text(report_data.get('decision_summary'))}",
                 self.styles['CustomBody']
             )
             elements.append(summary_text)
@@ -282,7 +300,7 @@ class PDFExportService:
 
         # Özet
         if tsg_data.get('summary'):
-            elements.append(Paragraph(tsg_data['summary'], self.styles['CustomBody']))
+            elements.append(Paragraph(self._sanitize_text(tsg_data['summary']), self.styles['CustomBody']))
             elements.append(Spacer(1, 0.2*cm))
 
         # Önemli bulgular
@@ -290,7 +308,7 @@ class PDFExportService:
             findings = tsg_data['key_findings']
             if isinstance(findings, list) and findings:
                 for finding in findings[:5]:  # İlk 5 bulgu
-                    elements.append(Paragraph(f"• {finding}", self.styles['CustomBody']))
+                    elements.append(Paragraph(f"• {self._sanitize_text(finding)}", self.styles['CustomBody']))
 
         elements.append(Spacer(1, 0.3*cm))
         return elements
@@ -304,7 +322,7 @@ class PDFExportService:
 
         # Özet
         if ihale_data.get('summary'):
-            elements.append(Paragraph(ihale_data['summary'], self.styles['CustomBody']))
+            elements.append(Paragraph(self._sanitize_text(ihale_data['summary']), self.styles['CustomBody']))
             elements.append(Spacer(1, 0.2*cm))
 
         # Uyarı bayrakları
@@ -313,7 +331,7 @@ class PDFExportService:
             if isinstance(warnings, list) and warnings:
                 for warning in warnings:
                     warning_para = Paragraph(
-                        f"<font color='red'>⚠ {warning}</font>",
+                        f"<font color='red'>! {self._sanitize_text(warning)}</font>",
                         self.styles['CustomBody']
                     )
                     elements.append(warning_para)
@@ -330,7 +348,7 @@ class PDFExportService:
 
         # Özet
         if news_data.get('summary'):
-            elements.append(Paragraph(news_data['summary'], self.styles['CustomBody']))
+            elements.append(Paragraph(self._sanitize_text(news_data['summary']), self.styles['CustomBody']))
             elements.append(Spacer(1, 0.2*cm))
 
         # Önemli haberler
@@ -338,7 +356,7 @@ class PDFExportService:
             findings = news_data['key_findings']
             if isinstance(findings, list) and findings:
                 for finding in findings[:3]:  # İlk 3 haber
-                    elements.append(Paragraph(f"• {finding}", self.styles['CustomBody']))
+                    elements.append(Paragraph(f"* {self._sanitize_text(finding)}", self.styles['CustomBody']))
 
         elements.append(Spacer(1, 0.3*cm))
         return elements
@@ -375,14 +393,15 @@ class PDFExportService:
             elements.append(score_table)
             elements.append(Spacer(1, 0.3*cm))
 
-        # Karar gerekçesi
-        if council.get('decision_rationale'):
+        # Karar gerekçesi (summary alanı)
+        rationale = council.get('decision_rationale') or council.get('summary')
+        if rationale:
             elements.append(Paragraph(
                 f"<b>Karar Gerekcesi:</b>",
                 self.styles['CustomBody']
             ))
             elements.append(Paragraph(
-                council['decision_rationale'],
+                self._sanitize_text(rationale),
                 self.styles['CustomBody']
             ))
             elements.append(Spacer(1, 0.3*cm))
@@ -392,13 +411,13 @@ class PDFExportService:
         if conditions and isinstance(conditions, list):
             elements.append(Paragraph("<b>Sartlar:</b>", self.styles['CustomBody']))
             for condition in conditions:
-                elements.append(Paragraph(f"• {condition}", self.styles['CustomBody']))
+                elements.append(Paragraph(f"* {self._sanitize_text(condition)}", self.styles['CustomBody']))
             elements.append(Spacer(1, 0.3*cm))
 
         # Muhalefet notu (eğer varsa)
         if council.get('dissent_note'):
             elements.append(Paragraph(
-                f"<b>Muhalefet Notu:</b> {council['dissent_note']}",
+                f"<b>Muhalefet Notu:</b> {self._sanitize_text(council['dissent_note'])}",
                 self.styles['CustomBody']
             ))
 
