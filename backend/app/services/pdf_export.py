@@ -440,8 +440,19 @@ class PDFExportService:
         return str(dt)
 
     def generate_filename(self, company_name: str) -> str:
-        """PDF dosya adı oluşturur"""
-        safe_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).strip()
+        """PDF dosya adı oluşturur (ASCII karakterler, HTTP header uyumlu)"""
+        import unicodedata
+        # Türkçe karakterleri ASCII'ye çevir
+        tr_map = {
+            'ı': 'i', 'İ': 'I', 'ğ': 'g', 'Ğ': 'G',
+            'ü': 'u', 'Ü': 'U', 'ş': 's', 'Ş': 'S',
+            'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
+        }
+        for tr_char, ascii_char in tr_map.items():
+            company_name = company_name.replace(tr_char, ascii_char)
+
+        # Sadece ASCII alfanumerik ve boşluk/tire/alt çizgi
+        safe_name = "".join(c for c in company_name if c.isascii() and (c.isalnum() or c in (' ', '-', '_'))).strip()
         safe_name = safe_name.replace(' ', '_')
         date_str = datetime.now().strftime('%Y-%m-%d')
         return f"{safe_name}_Rapor_{date_str}.pdf"

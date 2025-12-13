@@ -36,8 +36,42 @@ async function fetchApi<T>(
       ...options,
     });
 
-    const data = await response.json();
-    return data as ApiResponse<T>;
+    // Boş yanıt kontrolü
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+      // Boş yanıt - 204 No Content veya benzeri durumlar için
+      if (response.ok) {
+        return {
+          success: true,
+          data: null as T,
+          error: null,
+        };
+      }
+      return {
+        success: false,
+        data: null,
+        error: {
+          code: 'EMPTY_RESPONSE',
+          message: 'Sunucudan boş yanıt alındı',
+        },
+      };
+    }
+
+    // JSON parse et
+    try {
+      const data = JSON.parse(text);
+      return data as ApiResponse<T>;
+    } catch {
+      // JSON parse hatası
+      return {
+        success: false,
+        data: null,
+        error: {
+          code: 'INVALID_JSON',
+          message: 'Geçersiz JSON yanıtı',
+        },
+      };
+    }
   } catch (error) {
     return {
       success: false,

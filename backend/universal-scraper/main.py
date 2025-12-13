@@ -54,7 +54,8 @@ SCRAPER_CONFIG = {
     "cnnturk": {
         "name": "CNN Turk",
         "base_url": "https://www.cnnturk.com",
-        "search_url": "https://www.cnnturk.com/arama?query=",
+        "search_url": "https://www.cnnturk.com/haberleri/",  # slug-based
+        "slug_based": True,
     },
     "dunya": {
         "name": "Dunya Gazetesi",
@@ -64,17 +65,18 @@ SCRAPER_CONFIG = {
     "ekonomim": {
         "name": "Ekonomim",
         "base_url": "https://www.ekonomim.com",
-        "search_url": "https://www.ekonomim.com/arama?q=",
+        "search_url": "https://www.ekonomim.com/ara?key=",
     },
     "bigpara": {
         "name": "Bigpara",
         "base_url": "https://bigpara.hurriyet.com.tr",
-        "search_url": "https://bigpara.hurriyet.com.tr/haberler/ara/?q=",
+        "search_url": "https://bigpara.hurriyet.com.tr/haberler/ekonomi-haberleri/?searchKey=",
     },
     "ntv": {
         "name": "NTV",
         "base_url": "https://www.ntv.com.tr",
-        "search_url": "https://www.ntv.com.tr/arama?q=",
+        "search_url": "https://www.ntv.com.tr/ara/",  # slug-based
+        "slug_based": True,
     },
     "sozcu": {
         "name": "Sozcu",
@@ -216,9 +218,17 @@ async def scrape_news(company_name: str, max_articles: int = 3) -> List[Dict[str
         page = await context.new_page()
         page.set_default_timeout(90000)  # 90s for OCR fallback
 
-        # Search URL
-        encoded_query = urllib.parse.quote(company_name)
-        search_url = f"{config['search_url']}{encoded_query}"
+        # Search URL - slug-based veya query-based
+        if config.get("slug_based"):
+            # Türkçe karakterleri dönüştür ve slug oluştur
+            company_slug = company_name.lower()
+            for tr_char, en_char in [('ı', 'i'), ('ş', 's'), ('ğ', 'g'), ('ü', 'u'), ('ö', 'o'), ('ç', 'c')]:
+                company_slug = company_slug.replace(tr_char, en_char)
+            company_slug = company_slug.replace(' ', '-')
+            search_url = f"{config['search_url']}{company_slug}"
+        else:
+            encoded_query = urllib.parse.quote(company_name)
+            search_url = f"{config['search_url']}{encoded_query}"
 
         logger.info(f"[{config['name']}] Searching: {search_url}")
 

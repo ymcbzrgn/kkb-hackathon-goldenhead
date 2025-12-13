@@ -3,6 +3,7 @@ Council Service
 6 kişilik AI kredi komitesi toplantısı
 """
 import asyncio
+import os
 from typing import Callable, Dict, List, Optional, Any
 from datetime import datetime
 
@@ -17,10 +18,18 @@ from app.council.personas import (
 from app.council.prompts import get_system_prompt
 
 
+# Demo Mode - 10 dakikalık kısaltılmış pipeline (env'den default alınır, per-request override edilebilir)
+DEFAULT_DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+print(f"[COUNCIL] Default Demo Mode: {'ENABLED - Kısaltılmış toplantı' if DEFAULT_DEMO_MODE else 'DISABLED - Tam toplantı'}")
+
 # Council speech pacing - insan okuma hizinda streaming
-SPEECH_CHUNK_DELAY_MS = 30  # Her chunk arasinda bekleme (ms)
-SPEECH_MIN_BUFFER_SIZE = 6  # Minimum buffer boyutu (karakter)
-SPEECH_MAX_BUFFER_TIME = 0.08  # Maksimum buffer suresi (saniye)
+# Not: Bu değerler DEFAULT_DEMO_MODE için, per-request demo_mode için __init__'de ayarlanır
+SPEECH_CHUNK_DELAY_MS_DEMO = 5  # Demo mode
+SPEECH_CHUNK_DELAY_MS_NORMAL = 30  # Normal mode
+SPEECH_MIN_BUFFER_SIZE_DEMO = 10
+SPEECH_MIN_BUFFER_SIZE_NORMAL = 6
+SPEECH_MAX_BUFFER_TIME_DEMO = 0.02
+SPEECH_MAX_BUFFER_TIME_NORMAL = 0.08
 
 
 class CouncilService:
@@ -35,11 +44,24 @@ class CouncilService:
     5. WebSocket üzerinden streaming yap (Redis Pub/Sub ile)
     """
 
-    def __init__(self, report_id: str = None):
+    def __init__(self, report_id: str = None, demo_mode: Optional[bool] = None):
         self.report_id = report_id
+        self.demo_mode = demo_mode if demo_mode is not None else DEFAULT_DEMO_MODE
         self.llm = LLMClient()
         self.members = COUNCIL_MEMBERS
         self.phases = MEETING_PHASES
+
+        # Demo/Normal mode'a göre speech pacing ayarla
+        if self.demo_mode:
+            self.speech_chunk_delay_ms = SPEECH_CHUNK_DELAY_MS_DEMO
+            self.speech_min_buffer_size = SPEECH_MIN_BUFFER_SIZE_DEMO
+            self.speech_max_buffer_time = SPEECH_MAX_BUFFER_TIME_DEMO
+        else:
+            self.speech_chunk_delay_ms = SPEECH_CHUNK_DELAY_MS_NORMAL
+            self.speech_min_buffer_size = SPEECH_MIN_BUFFER_SIZE_NORMAL
+            self.speech_max_buffer_time = SPEECH_MAX_BUFFER_TIME_NORMAL
+
+        print(f"[COUNCIL] Report {report_id}: Demo Mode = {self.demo_mode}")
 
     async def _stream_speech_with_pacing(self, member_id: str, llm_stream) -> str:
         """
@@ -58,7 +80,7 @@ class CouncilService:
             elapsed = now - last_emit_time
 
             # Buffer'i gonder: ya zaman doldu ya da yeterli karakter birikti
-            if elapsed >= SPEECH_MAX_BUFFER_TIME or len(buffer) >= SPEECH_MIN_BUFFER_SIZE:
+            if elapsed >= self.speech_max_buffer_time or len(buffer) >= self.speech_min_buffer_size:
                 self._publish_event("council_speech", {
                     "speaker_id": member_id,
                     "chunk": buffer,
@@ -67,7 +89,7 @@ class CouncilService:
                 buffer = ""
                 last_emit_time = now
                 # Kucuk bir delay ekle - typing efekti icin
-                await asyncio.sleep(SPEECH_CHUNK_DELAY_MS / 1000.0)
+                await asyncio.sleep(self.speech_chunk_delay_ms / 1000.0)
 
         # Kalan buffer'i gonder
         if buffer:
@@ -104,6 +126,15 @@ class CouncilService:
         Returns:
             dict: Council kararı ve transcript
         """
+        # Demo mode: kısaltılmış toplantı
+        if self.demo_mode:
+            return await self._run_demo_meeting(
+                company_name=company_name,
+                agent_data=agent_data,
+                intelligence_report=intelligence_report,
+                ws_callback=ws_callback
+            )
+
         transcript: List[Dict] = []
         scores: Dict[str, int] = {}
         start_time = datetime.utcnow()
@@ -187,6 +218,279 @@ class CouncilService:
             "duration_seconds": duration
         }
 
+    async def _run_demo_meeting(
+        self,
+        company_name: str,
+        agent_data: Dict[str, Any],
+        intelligence_report: Optional[Dict[str, Any]] = None,
+        ws_callback: Optional[Callable] = None
+    ) -> Dict[str, Any]:
+        """
+        DEMO MODE: Kısaltılmış komite toplantısı (~5 dakika).
+
+        Tüm üyeler konuşur ama kısa tutulur:
+        1. Moderatör açılış
+        2. Her üye kısa görüş ve skor
+        3. Final karar
+        """
+        print(f"[COUNCIL] DEMO MODE: Kısaltılmış toplantı başlıyor - {company_name}")
+
+        transcript: List[Dict] = []
+        scores: Dict[str, int] = {}
+        start_time = datetime.utcnow()
+
+        # Context hazırla
+        context = self._prepare_context(company_name, agent_data, intelligence_report)
+
+        # Tüm üyeleri al
+        presentation_order = get_presentation_order()  # 5 analist sırayla
+
+        # Toplantı başladı event'i - tüm üyeler
+        self._publish_event("council_started", {
+            "total_phases": 7,  # Demo: açılış + 5 sunum + final
+            "members": [
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "role": m.role,
+                    "emoji": m.emoji
+                }
+                for m in self.members.values()
+            ],
+            "estimated_duration_seconds": 300  # ~5 dakika
+        })
+
+        # Formatlanmış veri hazırla
+        formatted_data = self._format_agent_data(context)
+        intel_summary = self._format_intelligence_summary(context.get("intelligence_report"))
+
+        # ============================================
+        # DEMO AŞAMA 1: Moderatör Açılış
+        # ============================================
+        moderator = get_member("moderator")
+
+        self._publish_event("council_phase_changed", {
+            "phase": 1,
+            "phase_name": "demo_opening",
+            "title": "Toplantı Açılışı"
+        })
+
+        self._publish_event("council_speaker_changed", {
+            "speaker_id": moderator.id,
+            "speaker_name": moderator.name,
+            "speaker_role": moderator.role,
+            "speaker_emoji": moderator.emoji
+        })
+
+        # Moderatör açılış prompt'u
+        opening_prompt = f"""
+Bugün {company_name} firmasını değerlendireceğiz.
+
+{intel_summary}
+
+Lütfen toplantıyı KISA açın (1-2 cümle). Hemen üyelere söz verin.
+"""
+
+        opening_response = await self._stream_speech_with_pacing(
+            moderator.id,
+            self.llm.chat_stream(
+                messages=[
+                    {"role": "system", "content": get_system_prompt("moderator")},
+                    {"role": "user", "content": opening_prompt}
+                ],
+                model="gpt-oss-120b"
+            )
+        )
+
+        self._publish_event("council_speech", {
+            "speaker_id": moderator.id,
+            "chunk": "",
+            "is_complete": True
+        })
+
+        transcript.append({
+            "phase": 1,
+            "speaker_id": moderator.id,
+            "speaker_name": moderator.name,
+            "content": opening_response,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        # ============================================
+        # DEMO AŞAMA 2-6: Her Üye Kısa Değerlendirme
+        # ============================================
+        import re
+
+        for i, member_id in enumerate(presentation_order):
+            phase_num = i + 2
+            member = get_member(member_id)
+
+            if not member:
+                continue
+
+            self._publish_event("council_phase_changed", {
+                "phase": phase_num,
+                "phase_name": f"demo_{member_id}_presentation",
+                "title": f"{member.name} Değerlendirmesi"
+            })
+
+            self._publish_event("council_speaker_changed", {
+                "speaker_id": member.id,
+                "speaker_name": member.name,
+                "speaker_role": member.role,
+                "speaker_emoji": member.emoji
+            })
+
+            # Kısa değerlendirme prompt'u
+            member_prompt = f"""
+{company_name} firmasını uzmanlık alanınız ({member.role}) açısından değerlendirin.
+
+=== VERİLER ===
+{formatted_data}
+
+GÖREV: KISA değerlendirme yapın:
+- 2-3 cümle analiz
+- Risk skoru (0-100, 0=güvenli, 100=riskli)
+
+SKOR FORMATI: [SKOR: XX]
+"""
+
+            member_response = await self._stream_speech_with_pacing(
+                member.id,
+                self.llm.chat_stream(
+                    messages=[
+                        {"role": "system", "content": get_system_prompt(member_id)},
+                        {"role": "user", "content": member_prompt}
+                    ],
+                    model="gpt-oss-120b"
+                )
+            )
+
+            self._publish_event("council_speech", {
+                "speaker_id": member.id,
+                "chunk": "",
+                "is_complete": True
+            })
+
+            transcript.append({
+                "phase": phase_num,
+                "speaker_id": member.id,
+                "speaker_name": member.name,
+                "content": member_response,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+            # Skor çıkar
+            match = re.search(r'\[SKOR:\s*(\d+)\]', member_response)
+            if match:
+                score = int(match.group(1))
+                score = max(0, min(100, score))
+            else:
+                # Fallback: member'ın eğilim aralığından orta değer
+                if member.score_tendency:
+                    score = (member.score_tendency[0] + member.score_tendency[1]) // 2
+                else:
+                    score = 50
+
+            scores[member_id] = score
+
+            self._publish_event("council_score_given", {
+                "member_id": member.id,
+                "score": score
+            })
+
+        # ============================================
+        # DEMO AŞAMA 7: Final Karar
+        # ============================================
+        self._publish_event("council_phase_changed", {
+            "phase": 7,
+            "phase_name": "demo_decision",
+            "title": "Final Karar"
+        })
+
+        self._publish_event("council_speaker_changed", {
+            "speaker_id": moderator.id,
+            "speaker_name": moderator.name,
+            "speaker_role": moderator.role,
+            "speaker_emoji": moderator.emoji
+        })
+
+        # Ağırlıklı skor hesapla
+        weighted_score = calculate_weighted_score(scores)
+        final_score = int(weighted_score)
+
+        # Risk seviyesi ve karar belirle
+        risk_level = self._determine_risk_level(final_score)
+        decision = self._determine_decision(final_score, context)
+        consensus = self._calculate_consensus(scores)
+
+        # Moderatör final özet
+        final_prompt = f"""
+{company_name} değerlendirmesi tamamlandı.
+
+Üye skorları: {scores}
+Ağırlıklı final skor: {final_score}
+Risk seviyesi: {risk_level}
+Karar: {decision}
+Konsensüs: %{consensus * 100:.0f}
+
+KISA özet yapın (2-3 cümle) ve kararı açıklayın.
+"""
+
+        final_response = await self._stream_speech_with_pacing(
+            moderator.id,
+            self.llm.chat_stream(
+                messages=[
+                    {"role": "system", "content": get_system_prompt("moderator")},
+                    {"role": "user", "content": final_prompt}
+                ],
+                model="gpt-oss-120b"
+            )
+        )
+
+        self._publish_event("council_speech", {
+            "speaker_id": moderator.id,
+            "chunk": "",
+            "is_complete": True
+        })
+
+        transcript.append({
+            "phase": 7,
+            "speaker_id": moderator.id,
+            "speaker_name": moderator.name,
+            "content": final_response,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+
+        # Council decision event'i
+        self._publish_event("council_decision", {
+            "final_score": final_score,
+            "risk_level": risk_level,
+            "decision": decision,
+            "consensus": consensus
+        })
+
+        # Süre hesapla
+        end_time = datetime.utcnow()
+        duration = int((end_time - start_time).total_seconds())
+
+        print(f"[COUNCIL] DEMO MODE: Toplantı tamamlandı - {duration}s, skor={final_score}, karar={decision}, konsensüs=%{consensus*100:.0f}")
+
+        return {
+            "final_score": final_score,
+            "risk_level": risk_level,
+            "decision": decision,
+            "consensus": consensus,
+            "conditions": [],
+            "summary": final_response,
+            "scores": {
+                "initial": scores,
+                "final": scores
+            },
+            "transcript": transcript,
+            "duration_seconds": duration
+        }
+
     def _prepare_context(
         self,
         company_name: str,
@@ -254,11 +558,19 @@ TICARET SICIL BILGILERI:
                 yasak_suresi = ihale_data.get("yasak_suresi", "-")
                 risk = ihale_data.get("risk_degerlendirmesi", "Bilinmiyor")
 
+            # ONEMLI: Toplam karar sayisi Resmi Gazete'deki GENEL yasaklamalari gosterir
+            # Firma icin onemli olan "Eslesen Karar" dir - bu firmaya ait yasaklama sayisi
+            if eslesen > 0:
+                ihale_aciklama = f"BU FIRMAYA AIT {eslesen} YASAKLAMA KARARI BULUNDU!"
+            else:
+                ihale_aciklama = f"Bu firmaya ait yasaklama karari BULUNMADI. (Resmi Gazete'de toplam {toplam} karar tarandı, hicbiri bu firmaya ait degil)"
+
             parts.append(f"""
 IHALE DURUMU:
 - Aktif Yasak: {yasak_str}
-- Toplam Karar: {toplam}
-- Eslesen Karar: {eslesen}
+- Bu Firmaya Ait Yasaklama: {eslesen} adet
+- Taranan Toplam Karar (Genel): {toplam} adet (DİKKAT: Bu sayi firmaya ait degil, Resmi Gazete'deki tum yasaklamalari gosterir)
+- Sonuc: {ihale_aciklama}
 - Risk Degerlendirmesi: {risk}
 - Yasaklayan Kurum: {yasaklayan_kurum}
 - Yasak Suresi: {yasak_suresi}""")
@@ -454,8 +766,9 @@ Risk Faktorleri:
         })
 
         system_prompt = get_system_prompt(speaker_id)
+        company_name = context["company_name"]
         user_prompt = f"""
-Tartışma aşamasındasınız. {target.name} ({target.role}) sizden farklı düşünüyor.
+{company_name} firması için tartışma aşamasındasınız. {target.name} ({target.role}) sizden farklı düşünüyor.
 
 Sizin skorunuz: {scores.get(speaker_id, 50)}
 {target.name}'ın skoru: {scores.get(target_id, 50)}
@@ -527,8 +840,9 @@ Kısa ve öz bir şekilde (2-3 cümle) görüşünüzü savunun veya uzlaşma ar
 
         # Moderatör özeti
         system_prompt = get_system_prompt("moderator")
+        company_name = context["company_name"]
         user_prompt = f"""
-Toplantıyı özetleyin ve kararı açıklayın.
+{company_name} firmasının değerlendirmesini özetleyin ve kararı açıklayın.
 
 Üye skorları: {scores}
 Final skor: {final_score}

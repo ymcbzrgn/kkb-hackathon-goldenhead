@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
 
+    # Demo Mode - 10 dakikalık kısaltılmış pipeline
+    DEMO_MODE: bool = False
+
     # CORS
     ALLOWED_ORIGINS: list[str] = ["*"]
 

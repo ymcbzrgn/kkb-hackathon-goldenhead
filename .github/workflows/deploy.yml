@@ -4,13 +4,164 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
 
 jobs:
   deploy:
+    name: Deploy to Server
     runs-on: self-hosted
+    environment: production
+
     steps:
-      - name: Deploy
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Pull latest code
         run: |
           cd /root/apps/kkb-hackathon-goldenhead
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
+          echo "📥 Code pulled successfully"
+
+      - name: Update Backend Dependencies
+        run: |
+          cd /root/apps/kkb-hackathon-goldenhead/backend
+          if [ -f "venv/bin/activate" ]; then
+            source venv/bin/activate
+            pip install -r requirements.txt --quiet
+            echo "📦 Backend dependencies updated"
+          else
+            echo "⚠️ Virtual environment not found, skipping pip install"
+          fi
+
+      - name: Run Database Migrations
+        run: |
+          cd /root/apps/kkb-hackathon-goldenhead/backend
+          if [ -f "venv/bin/activate" ]; then
+            source venv/bin/activate
+            alembic upgrade head || echo "⚠️ Migration skipped or failed"
+          fi
+
+      - name: Update K8s TSG Scraper
+        run: |
+          if kubectl get namespace tsg-agent &> /dev/null; then
+            echo "🔄 Updating TSG Scraper image..."
+            kubectl set image deployment/tsg-scraper \
+              scraper=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/tsg-scraper:${{ github.sha }} \
+              -n tsg-agent || echo "⚠️ TSG Scraper update skipped"
+
+            # Wait for rollout
+            kubectl rollout status deployment/tsg-scraper -n tsg-agent --timeout=120s || true
+          else
+            echo "ℹ️ tsg-agent namespace not found, skipping K8s update"
+          fi
+
+      - name: Update K8s İhale Scraper
+        run: |
+          if kubectl get namespace ihale-agent &> /dev/null; then
+            echo "🔄 Updating İhale Scraper image..."
+            kubectl set image deployment/ihale-scraper \
+              scraper=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ihale-scraper:${{ github.sha }} \
+              -n ihale-agent || echo "⚠️ İhale Scraper update skipped"
+
+            kubectl set image deployment/ihale-ocr \
+              ocr=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/ihale-ocr:${{ github.sha }} \
+              -n ihale-agent || echo "⚠️ İhale OCR update skipped"
+
+            kubectl rollout status deployment/ihale-scraper -n ihale-agent --timeout=120s || true
+          else
+            echo "ℹ️ ihale-agent namespace not found, skipping K8s update"
+          fi
+
+      - name: Update K8s News Scraper
+        run: |
+          if kubectl get namespace news-agent &> /dev/null; then
+            echo "🔄 Updating News Scraper image..."
+            kubectl set image deployment/news-scraper \
+              scraper=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/news-scraper:${{ github.sha }} \
+              -n news-agent || echo "⚠️ News Scraper update skipped"
+
+            kubectl rollout status deployment/news-scraper -n news-agent --timeout=120s || true
+          else
+            echo "ℹ️ news-agent namespace not found, skipping K8s update"
+          fi
+
+      - name: Update K8s LLM Gateway
+        run: |
+          if kubectl get namespace llm-gateway &> /dev/null; then
+            echo "🔄 Updating LLM Gateway image..."
+            kubectl set image deployment/llm-gateway \
+              gateway=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/llm-gateway:${{ github.sha }} \
+              -n llm-gateway || echo "⚠️ LLM Gateway update skipped"
+
+            kubectl rollout status deployment/llm-gateway -n llm-gateway --timeout=120s || true
+          else
+            echo "ℹ️ llm-gateway namespace not found, skipping K8s update"
+          fi
+
+      - name: Restart Backend Services
+        run: |
+          cd /root/apps/kkb-hackathon-goldenhead
+
+          # Restart API server if using systemd
+          if systemctl is-active --quiet kkb-api; then
+            sudo systemctl restart kkb-api
+            echo "🔄 API server restarted"
+          fi
+
+          # Restart Celery worker if using systemd
+          if systemctl is-active --quiet kkb-celery; then
+            sudo systemctl restart kkb-celery
+            echo "🔄 Celery worker restarted"
+          fi
+
+      - name: Health Check - API
+        run: |
+          echo "🏥 Checking API health..."
+          sleep 10
+
+          # Try local API
+          if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ API is healthy"
+          else
+            echo "⚠️ API health check failed or not running locally"
+          fi
+
+      - name: Health Check - TSG Scraper
+        run: |
+          echo "🏥 Checking TSG Scraper health..."
+
+          # Try K8s service
+          if kubectl get svc tsg-scraper -n tsg-agent &> /dev/null; then
+            TSG_POD=$(kubectl get pods -n tsg-agent -l app=tsg-scraper -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            if [ -n "$TSG_POD" ]; then
+              kubectl exec -n tsg-agent $TSG_POD -- curl -sf http://localhost:8080/health && echo "✅ TSG Scraper is healthy" || echo "⚠️ TSG health check failed"
+            fi
+          else
+            echo "ℹ️ TSG Scraper not deployed in K8s"
+          fi
+
+      - name: Deploy Summary
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "🚀 DEPLOY SUMMARY"
+          echo "=========================================="
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Time: $(date)"
+          echo "=========================================="
           echo "✅ Deploy tamamlandı!"

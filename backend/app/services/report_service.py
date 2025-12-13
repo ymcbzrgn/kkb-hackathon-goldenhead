@@ -89,11 +89,9 @@ class ReportService:
         return report
 
     def delete(self, report_id: UUID) -> bool:
-        """Raporu sil (soft delete)"""
+        """Raporu sil (soft delete) - her durumda silinebilir"""
         report = self.get_by_id(report_id)
         if report:
-            if report.status == ReportStatus.PROCESSING.value:
-                raise ValueError("İşlemi devam eden rapor silinemez")
             report.deleted_at = datetime.now(timezone.utc)
             self.db.commit()
             return True
@@ -114,6 +112,10 @@ class ReportService:
 
         current_data = report.reserved_json or {}
         agent_progresses = current_data.get("agent_progresses", {})
+
+        # Progress %100 ise status'ü otomatik "completed" yap
+        if progress >= 100:
+            status = "completed"
 
         agent_progresses[agent_id] = {
             "progress": progress,

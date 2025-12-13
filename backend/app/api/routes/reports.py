@@ -4,7 +4,7 @@ Rapor CRUD işlemleri
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
@@ -12,7 +12,8 @@ from uuid import UUID
 from app.core.database import get_db
 from app.services.report_service import ReportService
 from app.services.pdf_export import PDFExportService
-from app.models.report import ReportStatus
+from app.models.report import Report, ReportStatus
+from app.models.council_decision import AgentResult, CouncilDecision
 from app.workers.tasks import generate_report_task
 
 
@@ -20,6 +21,7 @@ class ReportCreateRequest(BaseModel):
     """Rapor oluşturma isteği"""
     company_name: str
     company_tax_no: Optional[str] = None
+    demo_mode: bool = False  # Demo mode: ~10dk, Normal: ~40dk
 
 
 router = APIRouter()
@@ -66,7 +68,8 @@ async def create_report(
     # Celery task başlat
     generate_report_task.delay(
         report_id=str(report.id),
-        company_name=request.company_name
+        company_name=request.company_name,
+        demo_mode=request.demo_mode
     )
 
     return {
@@ -295,9 +298,14 @@ async def export_pdf(
             }
         )
 
-    # 2. Raporu getir
-    report_service = ReportService(db)
-    report = report_service.get_by_id(report_uuid)
+    # 2. Raporu getir (PDF için ilişkileri eager load et)
+    report = db.query(Report).options(
+        joinedload(Report.agent_results),
+        joinedload(Report.council_decision)
+    ).filter(
+        Report.id == report_uuid,
+        Report.deleted_at.is_(None)
+    ).first()
 
     if not report:
         raise HTTPException(

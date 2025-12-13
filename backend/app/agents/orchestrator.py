@@ -14,18 +14,26 @@ from datetime import datetime
 
 from app.agents.tsg.agent import TSGAgent
 
-# K8s configuration
-USE_K8S_IHALE_AGENT = os.getenv("USE_K8S_IHALE_AGENT", "true").lower() == "true"
-USE_K8S_NEWS_AGENT = os.getenv("USE_K8S_NEWS_AGENT", "true").lower() == "true"
+# K8s configuration - local development için default false
+# Production'da K8s varsa env'den true yapılabilir
+USE_K8S_IHALE_AGENT = os.getenv("USE_K8S_IHALE_AGENT", "false").lower() == "true"
+USE_K8S_NEWS_AGENT = os.getenv("USE_K8S_NEWS_AGENT", "false").lower() == "true"
+USE_K8S_TSG_AGENT = os.getenv("USE_K8S_TSG_AGENT", "false").lower() == "true"
 
 # Her iki agent türünü de import et (fallback için)
 from app.agents.ihale_agent_k8s import IhaleAgentK8s
 from app.agents.ihale_agent import IhaleAgent as LocalIhaleAgent
 from app.agents.news_agent_k8s import NewsAgentK8s
 from app.agents.news_agent import NewsAgent as LocalNewsAgent
+from app.agents.tsg_agent_k8s import TSGAgentK8s
 
+# Demo mode - 10 dakikalık kısaltılmış pipeline (env'den default alınır, per-request override edilebilir)
+DEFAULT_DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
+print(f"[ORCHESTRATOR] Default Demo Mode: {'ENABLED - 10dk pipeline' if DEFAULT_DEMO_MODE else 'DISABLED - Tam pipeline'}")
 print(f"[ORCHESTRATOR] K8s Ihale Agent: {'ENABLED' if USE_K8S_IHALE_AGENT else 'DISABLED'} (fallback to local on failure)")
 print(f"[ORCHESTRATOR] K8s News Agent: {'ENABLED' if USE_K8S_NEWS_AGENT else 'DISABLED'} (fallback to local on failure)")
+print(f"[ORCHESTRATOR] K8s TSG Agent: {'ENABLED' if USE_K8S_TSG_AGENT else 'DISABLED'} (fallback to local on failure)")
 from app.agents.base_agent import AgentResult, AgentProgress
 from app.council.council_service import CouncilService
 from app.services.report_generator import ReportGenerator
@@ -47,28 +55,39 @@ class Orchestrator:
         self,
         report_id: str,
         ws_callback: Optional[Callable] = None,
-        db_callback: Optional[Callable] = None
+        db_callback: Optional[Callable] = None,
+        demo_mode: Optional[bool] = None
     ):
         self.report_id = report_id
         self.ws_callback = ws_callback or self._default_ws_callback
         self.db_callback = db_callback  # Progress'i DB'ye kaydetmek için
 
+        # Demo mode: per-request veya env default
+        self.demo_mode = demo_mode if demo_mode is not None else DEFAULT_DEMO_MODE
+        print(f"[ORCHESTRATOR] Report {report_id}: Demo Mode = {self.demo_mode}")
+
         # Agent'ları oluştur - primary ve fallback ayrı
-        self.tsg_agent = TSGAgent()
+        # TSG Agent (K8s primary, local fallback)
+        self.tsg_agent_k8s = TSGAgentK8s() if USE_K8S_TSG_AGENT else None
+        self.tsg_agent_local = TSGAgent()
 
         # Ihale Agent (K8s primary, local fallback)
+        # Demo mode'da 7 gün, normal modda 90 gün tarama
         self.ihale_agent_k8s = IhaleAgentK8s() if USE_K8S_IHALE_AGENT else None
-        self.ihale_agent_local = LocalIhaleAgent()
+        self.ihale_agent_local = LocalIhaleAgent(demo_mode=self.demo_mode)
 
         # News Agent (K8s primary, local fallback)
+        # Demo mode'da 1 yıl ve 5 haber/kaynak, normal modda 3 yıl ve 15 haber/kaynak
         self.news_agent_k8s = NewsAgentK8s() if USE_K8S_NEWS_AGENT else None
-        self.news_agent_local = LocalNewsAgent()
+        self.news_agent_local = LocalNewsAgent(demo_mode=self.demo_mode)
 
-        # Council servisi - report_id ile başlat (Redis Pub/Sub için gerekli)
-        self.council_service = CouncilService(report_id=report_id)
+        # Council servisi - report_id ve demo_mode ile başlat
+        self.council_service = CouncilService(report_id=report_id, demo_mode=self.demo_mode)
 
         # Progress callback'leri ayarla
-        self.tsg_agent.set_progress_callback(self._create_progress_handler("tsg_agent"))
+        if self.tsg_agent_k8s:
+            self.tsg_agent_k8s.set_progress_callback(self._create_progress_handler("tsg_agent"))
+        self.tsg_agent_local.set_progress_callback(self._create_progress_handler("tsg_agent"))
 
         # K8s ve local agent'lar için aynı handler
         if self.ihale_agent_k8s:
@@ -224,6 +243,28 @@ class Orchestrator:
             print(f"[ORCHESTRATOR] News: LOCAL agent kullanılıyor (K8s devre dışı)")
             return await self.news_agent_local.execute(company_name)
 
+    async def _run_tsg_with_fallback(self, company_name: str) -> AgentResult:
+        """
+        TSG Agent'ı fallback mekanizmasıyla çalıştır.
+        K8s önce, fail olursa local.
+        """
+        if self.tsg_agent_k8s:
+            print(f"[ORCHESTRATOR] TSG: K8s agent deneniyor...")
+            try:
+                result = await self.tsg_agent_k8s.execute(company_name)
+                if self._should_fallback(result):
+                    print(f"[ORCHESTRATOR] TSG: K8s sonuç yetersiz, LOCAL agent'a düşülüyor...")
+                    print(f"[ORCHESTRATOR] TSG: K8s status={result.status}, duration={result.duration_seconds}s")
+                    return await self.tsg_agent_local.execute(company_name)
+                print(f"[ORCHESTRATOR] TSG: K8s başarılı, süre={result.duration_seconds}s")
+                return result
+            except Exception as e:
+                print(f"[ORCHESTRATOR] TSG: K8s HATA: {e}, LOCAL agent'a düşülüyor...")
+                return await self.tsg_agent_local.execute(company_name)
+        else:
+            print(f"[ORCHESTRATOR] TSG: LOCAL agent kullanılıyor (K8s devre dışı)")
+            return await self.tsg_agent_local.execute(company_name)
+
     async def run(self, company_name: str) -> Dict[str, Any]:
         """
         Tam rapor sürecini çalıştır.
@@ -237,35 +278,137 @@ class Orchestrator:
         start_time = datetime.utcnow()
 
         # Job başladı event'i
+        # Demo mode: 10 dakika, Normal: 40 dakika
+        estimated_duration = 600 if self.demo_mode else 2400
         await self._send_event("job_started", {
             "report_id": self.report_id,
             "company_name": company_name,
-            "estimated_duration_seconds": 2400
+            "estimated_duration_seconds": estimated_duration
         })
 
         # ============================================
-        # AŞAMA 1: Agent'ları paralel çalıştır
+        # AŞAMA 1: TSG Agent'ı ÖNCE çalıştır (2 dk timeout)
+        # Firma ünvanı bulunursa diğer agentlar bu ünvanı kullanır
         # ============================================
 
-        # Agent başladı event'leri
+        # TSG Agent başladı
+        await self._send_event("agent_started", {
+            "agent_id": "tsg_agent",
+            "agent_name": "TSG Agent",
+            "agent_description": "Firma ünvanı aranıyor..."
+        })
+
+        # TSG Agent'ı 2 dakika (120 saniye) timeout ile çalıştır
+        TSG_TIMEOUT = 120  # 2 dakika
+        print(f"[ORCHESTRATOR] TSG Agent başlıyor (timeout: {TSG_TIMEOUT}s) - Firma ünvanı aranıyor...")
+
+        tsg_result = None
+        resolved_company_name = company_name  # Default: kullanıcının yazdığı
+
+        try:
+            tsg_task = asyncio.create_task(self._run_tsg_with_fallback(company_name))
+            done, pending = await asyncio.wait([tsg_task], timeout=TSG_TIMEOUT)
+
+            if tsg_task in done:
+                tsg_result = tsg_task.result()
+
+                # TSG'den firma ünvanı bul
+                if tsg_result and tsg_result.status == "completed" and tsg_result.data:
+                    tsg_data = tsg_result.data
+                    # tsg_sonuc içinden Firma Unvani'nı al
+                    tsg_sonuc = tsg_data.get("tsg_sonuc", {})
+                    yapilandirilmis = tsg_sonuc.get("yapilandirilmis_veri", {})
+                    found_name = yapilandirilmis.get("Firma Unvani")
+
+                    if found_name and found_name.strip():
+                        resolved_company_name = found_name.strip()
+                        print(f"[ORCHESTRATOR] ✅ TSG'den firma ünvanı bulundu: '{resolved_company_name}'")
+                        print(f"[ORCHESTRATOR] Diğer agentlar bu ünvanı kullanacak")
+                    else:
+                        print(f"[ORCHESTRATOR] ⚠️ TSG tamamlandı ama firma ünvanı bulunamadı, orijinal isim kullanılacak: '{company_name}'")
+                else:
+                    print(f"[ORCHESTRATOR] ⚠️ TSG başarısız veya veri yok, orijinal isim kullanılacak: '{company_name}'")
+            else:
+                # Timeout
+                print(f"[ORCHESTRATOR] ⚠️ TSG 2 dakika içinde tamamlanamadı, iptal ediliyor...")
+                tsg_task.cancel()
+                await asyncio.gather(tsg_task, return_exceptions=True)
+                tsg_result = AgentResult(agent_id="tsg_agent", status="failed", error="Timeout - 2 dakika içinde tamamlanamadı")
+                print(f"[ORCHESTRATOR] Orijinal isim kullanılacak: '{company_name}'")
+
+        except Exception as e:
+            print(f"[ORCHESTRATOR] TSG Agent hatası: {e}")
+            tsg_result = AgentResult(agent_id="tsg_agent", status="failed", error=str(e))
+
+        # TSG completed event'i
+        if tsg_result and tsg_result.status == "completed":
+            await self._send_event("agent_completed", {
+                "agent_id": "tsg_agent",
+                "duration_seconds": tsg_result.duration_seconds,
+                "summary": {
+                    "key_findings": tsg_result.key_findings,
+                    "warning_flags": tsg_result.warning_flags
+                }
+            })
+        else:
+            await self._send_event("agent_failed", {
+                "agent_id": "tsg_agent",
+                "error_code": "TSG_TIMEOUT_OR_ERROR",
+                "error_message": tsg_result.error if tsg_result else "Bilinmeyen hata",
+                "will_retry": False
+            })
+
+        # ============================================
+        # AŞAMA 2: Diğer Agent'ları paralel çalıştır
+        # resolved_company_name kullanılacak
+        # ============================================
+
+        print(f"[ORCHESTRATOR] Diğer agentlar başlıyor - Kullanılacak firma adı: '{resolved_company_name}'")
+
+        # İhale ve News agent başladı event'leri
         for agent_id, agent_name in [
-            ("tsg_agent", "TSG Agent"),
             ("ihale_agent", "İhale Agent"),
             ("news_agent", "Haber Agent")
         ]:
             await self._send_event("agent_started", {
                 "agent_id": agent_id,
                 "agent_name": agent_name,
-                "agent_description": f"{agent_name} başlatılıyor"
+                "agent_description": f"{agent_name} başlatılıyor - Firma: {resolved_company_name}"
             })
 
-        # Paralel çalıştır - Fallback mekanizmalı wrapper metodları kullan
-        results = await asyncio.gather(
-            self.tsg_agent.execute(company_name),
-            self._run_ihale_with_fallback(company_name),
-            self._run_news_with_fallback(company_name),
-            return_exceptions=True
-        )
+        # Demo modda maksimum 10 dakika (600 saniye), normal modda 40 dakika (2400 saniye)
+        agent_timeout = 600 if self.demo_mode else 2400
+        print(f"[ORCHESTRATOR] Agent timeout: {agent_timeout}s ({'demo' if self.demo_mode else 'normal'} mode)")
+
+        # Task'ları oluştur - resolved_company_name ile
+        ihale_task = asyncio.create_task(self._run_ihale_with_fallback(resolved_company_name))
+        news_task = asyncio.create_task(self._run_news_with_fallback(resolved_company_name))
+        other_tasks = [ihale_task, news_task]
+
+        # Timeout ile bekle
+        done, pending = await asyncio.wait(other_tasks, timeout=agent_timeout)
+
+        if pending:
+            print(f"[ORCHESTRATOR] {len(pending)} agent timeout oldu, iptal ediliyor...")
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        # Sonuçları topla
+        def get_task_result(task, agent_id):
+            if task in done and not task.cancelled():
+                try:
+                    return task.result()
+                except Exception as e:
+                    return AgentResult(agent_id=agent_id, status="failed", error=str(e))
+            else:
+                return AgentResult(agent_id=agent_id, status="failed", error="Timeout")
+
+        # TSG sonucu zaten var, diğerlerini al
+        ihale_result = get_task_result(ihale_task, "ihale_agent")
+        news_result = get_task_result(news_task, "news_agent")
+
+        results = [tsg_result, ihale_result, news_result]
 
         # Sonuçları işle
         agent_results = {}

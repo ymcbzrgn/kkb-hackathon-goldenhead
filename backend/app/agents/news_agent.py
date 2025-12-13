@@ -57,23 +57,40 @@ class NewsAgent(BaseAgent):
     - Diğer: NTV, Sözcü
     """
 
-    # Scraper başına maksimum haber sayısı
-    MAX_ARTICLES_PER_SOURCE = 2  # 3 → 2 (daha hızlı)
+    # Default parametreler (demo_mode=False için)
+    DEFAULT_MAX_ARTICLES_PER_SOURCE = 15  # 3 yıllık derinlik için artırıldı
+    DEFAULT_SCRAPER_TIMEOUT = 180  # Daha kısa timeout, paralel telafi eder
+    DEFAULT_MAX_CONCURRENT_SCRAPERS = 7  # 10 kaynağın 7'si aynı anda
+    DEFAULT_YEARS_BACK = 3  # 3 yıllık tarama
 
-    # Scraper timeout (saniye)
-    # HACKATHON: 15dk toplam süre var, kalite > hız!
-    SCRAPER_TIMEOUT = 300  # 5 dakika per scraper (paralel çalışıyor)
+    # Demo mode parametreleri
+    DEMO_MAX_ARTICLES_PER_SOURCE = 5
+    DEMO_SCRAPER_TIMEOUT = 120
+    DEMO_MAX_CONCURRENT_SCRAPERS = 5
+    DEMO_YEARS_BACK = 1
 
-    # Maksimum eşzamanlı scraper sayısı (rate limiting)
-    MAX_CONCURRENT_SCRAPERS = 3
-
-    def __init__(self):
+    def __init__(self, demo_mode: bool = False):
         super().__init__(
             agent_id="news_agent",
             agent_name="Haber Agent",
             agent_description="Haber toplama ve sentiment analizi"
         )
         self.llm = LLMClient()
+        self.demo_mode = demo_mode
+
+        # Demo/Normal mode'a göre parametreleri ayarla
+        if demo_mode:
+            self.MAX_ARTICLES_PER_SOURCE = self.DEMO_MAX_ARTICLES_PER_SOURCE
+            self.SCRAPER_TIMEOUT = self.DEMO_SCRAPER_TIMEOUT
+            self.MAX_CONCURRENT_SCRAPERS = self.DEMO_MAX_CONCURRENT_SCRAPERS
+            self.YEARS_BACK = self.DEMO_YEARS_BACK
+        else:
+            self.MAX_ARTICLES_PER_SOURCE = self.DEFAULT_MAX_ARTICLES_PER_SOURCE
+            self.SCRAPER_TIMEOUT = self.DEFAULT_SCRAPER_TIMEOUT
+            self.MAX_CONCURRENT_SCRAPERS = self.DEFAULT_MAX_CONCURRENT_SCRAPERS
+            self.YEARS_BACK = self.DEFAULT_YEARS_BACK
+
+        print(f"[NEWS AGENT] Mode: {'DEMO' if demo_mode else 'FULL'}, Articles/Source: {self.MAX_ARTICLES_PER_SOURCE}, Years: {self.YEARS_BACK}")
 
     async def run(self, company_name: str) -> AgentResult:
         """Haberleri topla ve analiz et"""
@@ -205,13 +222,19 @@ class NewsAgent(BaseAgent):
 
     def _filter_by_date(self, articles: List[Dict]) -> List[Dict]:
         """
-        HACKATHON: Tarih filtresi (2022-2025).
+        Tarih filtresi - YEARS_BACK parametresine göre dinamik.
 
         KULLANICI TERCİHİ:
         - Unknown tarihler dahil edilir ("Tarih bilinmiyor" olarak)
-        - 2022 öncesi haberler filtrelenir
+        - YEARS_BACK yıl öncesinden eski haberler filtrelenir
         """
+        from datetime import datetime
+
         filtered = []
+        current_year = datetime.now().year
+        min_year = current_year - self.YEARS_BACK  # Dinamik: 3 yıl geri veya demo'da 1 yıl
+
+        log(f"Tarih filtresi: {min_year}-{current_year} ({self.YEARS_BACK} yıl)")
 
         for article in articles:
             date_str = article.get('date', 'unknown')
@@ -220,14 +243,14 @@ class NewsAgent(BaseAgent):
             normalized_date = normalize_date(date_str)
 
             # Tarih aralığını kontrol et
-            is_valid, display_date = is_date_in_range(normalized_date, min_year=2022, max_year=2025)
+            is_valid, display_date = is_date_in_range(normalized_date, min_year=min_year, max_year=current_year)
 
             if is_valid:
                 article['date'] = normalized_date
                 article['date_display'] = display_date
                 filtered.append(article)
             else:
-                debug(f"Tarih filtre REJECTED (2022 öncesi): {date_str} - {article.get('title', '')[:50]}")
+                debug(f"Tarih filtre REJECTED ({min_year} öncesi): {date_str} - {article.get('title', '')[:50]}")
 
         return filtered
 
@@ -321,27 +344,121 @@ Cevap:"""
 
     async def _validate_all_articles(self, articles: List[Dict], company_name: str) -> List[Dict]:
         """
-        HACKATHON: Tüm haberleri LLM ile doğrula.
+        OPTİMİZE: Batch relevance validation.
 
-        KULLANICI TERCİHİ: Tek tek validation (kalite öncelikli).
+        Tüm haberleri tek LLM çağrısıyla validate et (30 LLM çağrısı → 1).
+        30'ar haber batch'ler halinde işlenir.
         """
+        if not articles:
+            return []
+
         validated = []
+        batch_size = 30  # Max 30 haber per batch
 
-        for i, article in enumerate(articles):
-            is_relevant, confidence = await self._validate_relevance(article, company_name)
+        log(f"Batch relevance validation başlıyor: {len(articles)} haber, batch_size={batch_size}")
 
-            if is_relevant:
-                article['relevance_confidence'] = round(confidence, 2)
-                validated.append(article)
-                debug(f"Relevance ACCEPTED: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
-            else:
-                debug(f"Relevance REJECTED: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
+        for batch_start in range(0, len(articles), batch_size):
+            batch = articles[batch_start:batch_start + batch_size]
+
+            # Batch için relevance kontrolü
+            batch_results = await self._batch_validate_relevance(batch, company_name)
+
+            for article, (is_relevant, confidence) in zip(batch, batch_results):
+                if is_relevant:
+                    article['relevance_confidence'] = round(confidence, 2)
+                    validated.append(article)
+                    debug(f"Relevance ACCEPTED: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
+                else:
+                    debug(f"Relevance REJECTED: {article.get('title', '')[:50]}... (conf: {confidence:.2f})")
 
             # Progress update
-            progress = 50 + int((i + 1) / len(articles) * 20)
-            self.report_progress(min(progress, 70), f"Relevance: {i + 1}/{len(articles)}")
+            progress = 50 + int((batch_start + len(batch)) / len(articles) * 20)
+            self.report_progress(min(progress, 70), f"Relevance: {batch_start + len(batch)}/{len(articles)}")
 
+        log(f"Batch validation tamamlandı: {len(validated)}/{len(articles)} haber geçti")
         return validated
+
+    async def _batch_validate_relevance(self, articles: List[Dict], company_name: str) -> List[Tuple[bool, float]]:
+        """
+        OPTİMİZE: Tek LLM çağrısıyla batch relevance validation.
+
+        Returns:
+            List[Tuple[bool, float]]: Her haber için (is_relevant, confidence)
+        """
+        if not articles:
+            return []
+
+        # Batch prompt oluştur
+        articles_text = "\n".join([
+            f"{i+1}. {a.get('title', '')[:100]}"
+            for i, a in enumerate(articles)
+        ])
+
+        prompt = f"""{company_name} firması için aşağıdaki haberlerin alakalılığını değerlendir.
+
+Her haber için:
+- Firma adı geçiyor mu?
+- Firmanın ürün/hizmetleri hakkında mı?
+- Rakip firma değil, gerçekten bu firma mı?
+
+HABERLER:
+{articles_text}
+
+HER HABER İÇİN TEK SATIRDA CEVAP VER:
+Numara. EVET veya HAYIR
+
+Örnek:
+1. EVET
+2. HAYIR
+3. EVET
+
+Şimdi değerlendir:"""
+
+        try:
+            response = await self.llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                model="gpt-oss-120b",
+                temperature=0.1,
+                max_tokens=len(articles) * 15  # Her satır için ~15 token
+            )
+
+            if not response or not response.strip():
+                warn("Batch relevance LLM boş response, keyword fallback kullanılıyor")
+                return [self._keyword_relevance(a, company_name) for a in articles]
+
+            # Response'u parse et
+            results = self._parse_batch_relevance_response(response, len(articles))
+
+            # Eksik sonuçları keyword fallback ile doldur
+            while len(results) < len(articles):
+                idx = len(results)
+                results.append(self._keyword_relevance(articles[idx], company_name))
+
+            return results
+
+        except Exception as e:
+            warn(f"Batch relevance validation hatası: {e}, keyword fallback kullanılıyor")
+            return [self._keyword_relevance(a, company_name) for a in articles]
+
+    def _parse_batch_relevance_response(self, response: str, expected_count: int) -> List[Tuple[bool, float]]:
+        """Batch relevance LLM response'unu parse et."""
+        results = []
+
+        for line in response.strip().split('\n'):
+            line = line.strip().upper()
+            if not line:
+                continue
+
+            # "1. EVET" veya "1.EVET" veya sadece "EVET" formatlarını handle et
+            is_relevant = "EVET" in line
+            confidence = 0.85 if is_relevant else 0.15  # LLM-based = yüksek güven
+
+            results.append((is_relevant, confidence))
+
+            if len(results) >= expected_count:
+                break
+
+        return results
 
     async def _analyze_sentiment(self, news_items: List[Dict]) -> List[Dict]:
         """
@@ -365,23 +482,37 @@ Cevap:"""
             titles = [f"{j+1}. {article.get('title', 'Başlıksız')}" for j, article in enumerate(batch)]
             titles_text = "\n".join(titles)
 
-            # HACKATHON: "olumlu/olumsuz" terminolojisi
-            prompt = f"""Aşağıdaki haber başlıklarının sentiment'ini analiz et.
+            # HACKATHON: "olumlu/olumsuz" terminolojisi - İYİLEŞTİRİLMİŞ PROMPT
+            prompt = f"""Sen bir haber sentiment analisti olarak görev yapıyorsun. Aşağıdaki haber başlıklarını firma açısından değerlendir.
 
 Haber Başlıkları:
 {titles_text}
 
-Her haber için tek kelime sentiment ver:
-- olumlu: İyi haber, olumlu gelişme, başarı, büyüme
-- olumsuz: Kötü haber, olumsuz gelişme, zarar, kriz
+DEĞERLENDIRME KRİTERLERİ:
+OLUMLU haberler:
+- Başarı, rekor, ödül, sertifika (örn: ISO sertifikası, ödül kazanma)
+- Büyüme, yatırım, istihdam artışı
+- Yolcu/satış/ihracat rekorları
+- Yeni anlaşma, işbirliği, ortaklık
+- Olumlu finansal sonuçlar (kâr, gelir artışı)
+- Teknoloji, inovasyon, modernizasyon
 
-Cevap formatı (sadece sentiment'ler, satır satır):
+OLUMSUZ haberler:
+- Kriz, iflas, konkordato, zarar
+- Dava, soruşturma, ceza, yaptırım
+- Kaza, arıza, gecikme, iptal
+- İşten çıkarma, maaş kesintisi
+- Skandal, yolsuzluk iddiaları
+- Olumsuz finansal sonuçlar
+
+Her haber için SADECE "olumlu" veya "olumsuz" yaz. Satır numarasını kullan.
+
+Örnek çıktı:
 1. olumlu
 2. olumsuz
 3. olumlu
-...
 
-Cevap:"""
+Şimdi analiz et:"""
 
             try:
                 response = await self.llm.chat(
@@ -391,21 +522,36 @@ Cevap:"""
                     max_tokens=200
                 )
 
-                # Response'u parse et
-                sentiments = self._parse_sentiment_response(response, len(batch))
+                # LLM response kontrolü
+                if not response or not response.strip():
+                    warn(f"Sentiment LLM boş response döndü, keyword fallback kullanılıyor")
+                    # Keyword-based fallback
+                    for article in batch:
+                        sentiment = self._keyword_sentiment(article.get('title', ''))
+                        debug(f"Keyword sentiment: '{article.get('title', '')[:50]}...' -> {sentiment}")
+                        analyzed.append({
+                            **article,
+                            "sentiment": sentiment
+                        })
+                else:
+                    debug(f"LLM sentiment response: {response[:200]}...")
+                    # Response'u parse et (batch'i de geçir, fallback için)
+                    sentiments = self._parse_sentiment_response(response, len(batch), batch)
 
-                for j, article in enumerate(batch):
-                    sentiment = sentiments[j] if j < len(sentiments) else "notr"
-                    analyzed.append({
-                        **article,
-                        "sentiment": sentiment
-                    })
+                    for j, article in enumerate(batch):
+                        sentiment = sentiments[j] if j < len(sentiments) else self._keyword_sentiment(article.get('title', ''))
+                        debug(f"Final sentiment: '{article.get('title', '')[:50]}...' -> {sentiment}")
+                        analyzed.append({
+                            **article,
+                            "sentiment": sentiment
+                        })
 
             except Exception as e:
                 error(f"Sentiment analizi hatası: {e}")
                 # Fallback: keyword-based sentiment
                 for article in batch:
                     sentiment = self._keyword_sentiment(article.get('title', ''))
+                    debug(f"Exception fallback sentiment: '{article.get('title', '')[:50]}...' -> {sentiment}")
                     analyzed.append({
                         **article,
                         "sentiment": sentiment
@@ -417,7 +563,7 @@ Cevap:"""
 
         return analyzed
 
-    def _parse_sentiment_response(self, response: str, expected_count: int) -> List[str]:
+    def _parse_sentiment_response(self, response: str, expected_count: int, batch: List[Dict] = None) -> List[str]:
         """LLM sentiment response'unu parse et."""
         sentiments = []
         # HACKATHON: olumlu/olumsuz terminolojisi
@@ -431,9 +577,16 @@ Cevap:"""
                     sentiments.append(sentiment)
                     break
 
-        # Eksik sentiment'leri olumsuz ile doldur (muhafazakar yaklaşım)
+        # Eksik sentiment'leri keyword-based analiz ile doldur (daha akıllı fallback)
         while len(sentiments) < expected_count:
-            sentiments.append("olumsuz")
+            idx = len(sentiments)
+            if batch and idx < len(batch):
+                # Keyword-based sentiment kullan
+                title = batch[idx].get('title', '')
+                sentiments.append(self._keyword_sentiment(title))
+            else:
+                # Son çare: nötr değerlendirme için olumlu varsay (muhafazakar yerine dengeli)
+                sentiments.append("olumlu")
 
         return sentiments
 
@@ -441,14 +594,35 @@ Cevap:"""
         """Fallback: keyword-based sentiment."""
         text_lower = text.lower()
 
-        # HACKATHON: olumlu/olumsuz terminolojisi
+        # HACKATHON: olumlu/olumsuz terminolojisi - GENİŞLETİLMİŞ LİSTE
         positive_keywords = [
-            "başarı", "büyüme", "yatırım", "istihdam", "artış", "rekor",
-            "kazanç", "kâr", "ihracat", "ödül", "anlaşma", "işbirliği"
+            # Başarı ve ödüller
+            "başarı", "başarılı", "ödül", "sertifika", "iso", "kalite", "standart",
+            # Büyüme ve yatırım
+            "büyüme", "büyüdü", "yatırım", "istihdam", "artış", "arttı", "artırdı",
+            # Rekorlar
+            "rekor", "rekoru", "en yüksek", "en iyi", "zirve", "lider", "birinci", "1.",
+            # Finansal olumlu
+            "kazanç", "kâr", "kar", "gelir", "ihracat", "satış",
+            # İşbirliği ve anlaşma
+            "anlaşma", "işbirliği", "ortaklık", "imza", "imzaladı", "protokol",
+            # Teknoloji ve inovasyon
+            "inovasyon", "teknoloji", "dijital", "modernizasyon", "yenilik",
+            # Genel olumlu
+            "açıldı", "açılış", "yeni", "genişleme", "genişledi", "hizmet",
+            "yolcu", "taşıdı", "uçuş", "sefer", "kapasite"
         ]
         negative_keywords = [
-            "zarar", "kriz", "iflas", "istifa", "düşüş", "azalma",
-            "yapılandırma", "soruşturma", "dava", "ceza", "iptal", "tehlike"
+            # Finansal olumsuz
+            "zarar", "kriz", "iflas", "konkordato", "borç", "düşüş", "azalma",
+            # Hukuki sorunlar
+            "soruşturma", "dava", "ceza", "yaptırım", "suç", "tutuklama",
+            # Operasyonel sorunlar
+            "kaza", "arıza", "gecikme", "iptal", "rötar", "tehlike", "risk",
+            # İstihdam olumsuz
+            "istifa", "işten çıkarma", "tazminat", "grev", "kesinti",
+            # Skandal
+            "skandal", "yolsuzluk", "iddia", "suçlama", "şikayet"
         ]
 
         pos_count = sum(1 for kw in positive_keywords if kw in text_lower)
@@ -456,8 +630,11 @@ Cevap:"""
 
         if pos_count > neg_count:
             return "olumlu"
+        elif neg_count > pos_count:
+            return "olumsuz"
         else:
-            return "olumsuz"  # Default: olumsuz (muhafazakar)
+            # Eşit veya keyword bulunamadıysa - olumlu varsay (dengeli yaklaşım)
+            return "olumlu"
 
     def _compile_results(self, analyzed_news: List[Dict]) -> Dict:
         """

@@ -1,0 +1,122 @@
+# Test deployment - sadece 2 scraper (CNNTürk ve Ekonomim)
+# RAM tasarrufu için local minikube'da kullanılır
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cnnturk-scraper
+  namespace: news-agent
+  labels:
+    app: cnnturk-scraper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cnnturk-scraper
+  template:
+    metadata:
+      labels:
+        app: cnnturk-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:v9
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "cnnturk"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cnnturk-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: cnnturk-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ekonomim-scraper
+  namespace: news-agent
+  labels:
+    app: ekonomim-scraper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ekonomim-scraper
+  template:
+    metadata:
+      labels:
+        app: ekonomim-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: news-universal-scraper:v9
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SCRAPER_TYPE
+          value: "ekonomim"
+        - name: LLM_GATEWAY_URL
+          value: "http://llm-gateway:8080"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ekonomim-scraper
+  namespace: news-agent
+spec:
+  selector:
+    app: ekonomim-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080

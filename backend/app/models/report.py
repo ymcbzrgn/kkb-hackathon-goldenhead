@@ -114,6 +114,11 @@ class Report(Base):
         return f"<Report(id={self.id}, company={self.company_name}, status={self.status})>"
 
     def to_dict(self):
+        # Agent progress'lerini reserved_json'dan çıkar
+        agent_progresses = None
+        if self.reserved_json and isinstance(self.reserved_json, dict):
+            agent_progresses = self.reserved_json.get("agent_progresses")
+
         return {
             "id": str(self.id),
             "company_name": self.company_name,
@@ -134,6 +139,8 @@ class Report(Base):
             "ihale_data": self.ihale_data,
             "news_data": self.news_data,
             "council_data": self.council_data,
+            # Agent progress'leri (canlı ilerleme takibi için)
+            "agent_progresses": agent_progresses,
             # Hata bilgileri
             "error_message": self.error_message,
             "error_code": self.error_code

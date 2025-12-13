@@ -27,6 +27,7 @@ export function useWebSocket({
   enabled = true,
 }: UseWebSocketOptions) {
   const connectionRef = useRef<WebSocketConnection | null>(null);
+  const hasConnectedOnce = useRef(false);
   const queryClient = useQueryClient();
 
   // Store actions
@@ -37,12 +38,11 @@ export function useWebSocket({
     endLiveSession 
   } = useReportStore();
 
-  const { 
-    startAgent, 
-    updateProgress, 
-    completeAgent, 
+  const {
+    startAgent,
+    updateProgress,
+    completeAgent,
     failAgent,
-    reset: resetAgents 
   } = useAgentStore();
 
   const {
@@ -53,7 +53,6 @@ export function useWebSocket({
     completeSpeech,
     reviseScore,
     setFinalDecision,
-    reset: resetCouncil,
   } = useCouncilStore();
 
   // Event handler
@@ -116,11 +115,14 @@ export function useWebSocket({
         break;
 
       case 'council_phase_changed':
+        // Backend farklı field adları kullanabilir - hepsini destekle
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const phasePayload = event.payload as any;
         changePhase(
-          event.payload.phase,
-          event.payload.phase_number,
-          event.payload.total_phases,
-          event.payload.phase_title
+          phasePayload.phase_name || phasePayload.phase || '',
+          phasePayload.phase_number ?? phasePayload.phase ?? 0,
+          phasePayload.total_phases ?? 0,
+          phasePayload.phase_title || phasePayload.title || ''
         );
         break;
 
@@ -160,6 +162,8 @@ export function useWebSocket({
         break;
     }
   }, [
+    reportId,
+    queryClient,
     setLivePhase,
     endLiveSession,
     setWsError,
@@ -184,9 +188,10 @@ export function useWebSocket({
       connectionRef.current.close();
     }
 
-    // Reset stores
-    resetAgents();
-    resetCouncil();
+    // NOT: Store'ları resetleme! API'den yüklenen veri korunmalı.
+    // Sayfa yenilendiğinde API'den veri yüklenir, WebSocket sadece
+    // yeni event'leri dinler. Reset yapmak veri kaybına neden olur.
+    hasConnectedOnce.current = true;
 
     // Connect
     connectionRef.current = connectWebSocket(reportId, companyName, {
@@ -208,8 +213,6 @@ export function useWebSocket({
     reportId,
     companyName,
     handleEvent,
-    resetAgents,
-    resetCouncil,
     setWsConnectionState,
     setWsError,
     onError,
@@ -221,6 +224,8 @@ export function useWebSocket({
       connectionRef.current.close();
       connectionRef.current = null;
     }
+    // Reset flag when component unmounts so next report gets fresh state
+    hasConnectedOnce.current = false;
   }, []);
 
   // Auto-connect on mount when enabled

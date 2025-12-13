@@ -18,7 +18,20 @@ import { Card } from '@/components/ui/card';
 import { TsgResults } from './TsgResults';
 import { IhaleResults } from './IhaleResults';
 import { NewsResults } from './NewsResults';
-import type { AgentResults as AgentResultsType } from '@/types';
+
+// Agent sonucu wrapper tipi
+interface AgentResult {
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  duration_seconds: number | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any;
+}
+
+interface AgentResultsType {
+  tsg: AgentResult;
+  ihale: AgentResult;
+  news: AgentResult;
+}
 
 interface AgentResultsProps {
   results: AgentResultsType;

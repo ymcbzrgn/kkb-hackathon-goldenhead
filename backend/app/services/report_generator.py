@@ -58,10 +58,16 @@ class ReportGenerator:
         # İHALE FAKTÖRLERİ (±35 puan) - EN KRİTİK!
         # ═══════════════════════════════════════
         if ihale_data:
-            if ihale_data.get("yasak_durumu"):
+            # ONEMLI: yasak_durumu veya yasakli_mi = aktif yasak var mi
+            # eslesen_karar = BU FIRMAYA AIT yasaklama sayisi
+            # bulunan_toplam_yasaklama / toplam_karar = Resmi Gazete'deki GENEL yasaklama (firmaya ait DEGIL!)
+            aktif_yasak = ihale_data.get("yasak_durumu", ihale_data.get("yasakli_mi", False))
+            firmaya_ait_yasak = ihale_data.get("eslesen_karar", 0)
+
+            if aktif_yasak:
                 score += 35  # AKTİF YASAK = BÜYÜK RİSK!
-            elif ihale_data.get("bulunan_toplam_yasaklama", 0) > 0:
-                score += 15  # Geçmişte yasak var
+            elif firmaya_ait_yasak > 0:
+                score += 15  # Bu firmaya ait geçmiş yasak var
             else:
                 score -= 10  # Temiz sicil = bonus
 
@@ -168,18 +174,22 @@ class ReportGenerator:
                 factors.append({"tip": "uyari", "mesaj": "Yonetici bilgisi eksik"})
 
         # İhale faktörleri
+        # ONEMLI: eslesen_karar = BU FIRMAYA AIT yasaklama sayisi
+        # bulunan_toplam_yasaklama = Resmi Gazete'deki GENEL yasaklama (firmaya ait DEGIL!)
         if ihale_data:
-            if ihale_data.get("yasak_durumu"):
+            aktif_yasak = ihale_data.get("yasak_durumu", ihale_data.get("yasakli_mi", False))
+            firmaya_ait_yasak = ihale_data.get("eslesen_karar", 0)
+
+            if aktif_yasak:
                 yasaklayan = ihale_data.get("yasaklayan_kurum", "Bilinmiyor")
                 factors.append({
                     "tip": "kritik",
                     "mesaj": f"AKTIF IHALE YASAGI - {yasaklayan}"
                 })
-            elif ihale_data.get("bulunan_toplam_yasaklama", 0) > 0:
-                yasak_sayisi = ihale_data["bulunan_toplam_yasaklama"]
+            elif firmaya_ait_yasak > 0:
                 factors.append({
                     "tip": "uyari",
-                    "mesaj": f"Gecmiste {yasak_sayisi} yasaklama kaydi"
+                    "mesaj": f"Bu firmaya ait gecmiste {firmaya_ait_yasak} yasaklama kaydi"
                 })
 
         # Haber faktörleri
@@ -280,9 +290,12 @@ class ReportGenerator:
         if not ihale_data:
             return None
 
+        # ONEMLI: eslesen_karar = BU FIRMAYA AIT yasaklama sayisi
+        # bulunan_toplam_yasaklama = Resmi Gazete'deki GENEL yasaklama (firmaya ait DEGIL!)
         return {
-            "yasak_var_mi": ihale_data.get("yasak_durumu", False),
-            "gecmis_yasak_sayisi": ihale_data.get("bulunan_toplam_yasaklama", 0),
+            "yasak_var_mi": ihale_data.get("yasak_durumu", ihale_data.get("yasakli_mi", False)),
+            "firmaya_ait_yasak_sayisi": ihale_data.get("eslesen_karar", 0),
+            "taranan_toplam_karar": ihale_data.get("bulunan_toplam_yasaklama", ihale_data.get("toplam_karar", 0)),
             "risk_degerlendirmesi": ihale_data.get("risk_degerlendirmesi", "bilinmiyor"),
             "yasaklayan_kurum": ihale_data.get("yasaklayan_kurum"),
             "yasak_suresi": ihale_data.get("yasak_suresi"),

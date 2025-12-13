@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tsg-config
+  namespace: tsg-agent
+data:
+  # TSG Credentials (Production'da Secret kullanilmali!)
+  TSG_EMAIL: "yamacbezirgan@gmail.com"
+  TSG_PASSWORD: "wisvar-wovwoj-7tagNe"
+
+  # LLM Gateway (news-agent namespace'inde)
+  LLM_GATEWAY_URL: "http://llm-gateway.news-agent:8080"
+
+  # Timeouts
+  PAGE_TIMEOUT: "30000"
+  MAX_RETRIES: "3"
+
+  # OCR Settings
+  OCR_DPI: "300"

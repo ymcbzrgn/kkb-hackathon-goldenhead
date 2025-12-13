@@ -12,14 +12,20 @@ from app.models.council_decision import AgentResult, CouncilDecision
 
 
 @celery_app.task(bind=True, max_retries=3)
-def generate_report_task(self, report_id: str, company_name: str):
+def generate_report_task(self, report_id: str, company_name: str, demo_mode: bool = False):
     """
     Rapor oluşturma görevi.
 
     1. Agent'ları paralel çalıştır
     2. Council toplantısını başlat
     3. Sonuçları kaydet
+
+    Args:
+        report_id: Rapor ID
+        company_name: Firma adı
+        demo_mode: Demo mode (~10dk) veya Normal mode (~40dk)
     """
+    print(f"[TASK] Rapor başlatılıyor: {company_name}, demo_mode={demo_mode}")
     try:
         # Database session
         db = SessionLocal()
@@ -45,7 +51,8 @@ def generate_report_task(self, report_id: str, company_name: str):
 
         orchestrator = Orchestrator(
             report_id=report_id,
-            db_callback=db_progress_callback
+            db_callback=db_progress_callback,
+            demo_mode=demo_mode
         )
 
         # Async loop oluştur ve çalıştır
@@ -63,7 +70,13 @@ def generate_report_task(self, report_id: str, company_name: str):
         # Agent sonuçlarını DB'ye kaydet
         # ============================================
         agent_results = result.get("agent_results", {})
+
+        # Report nesnesini al
+        from app.models.report import Report
+        report = db.query(Report).filter(Report.id == report_id).first()
+
         for agent_id, agent_result in agent_results.items():
+            # AgentResult tablosuna kaydet
             db_agent_result = AgentResult(
                 report_id=report_id,
                 agent_id=f"{agent_id}_agent" if not agent_id.endswith("_agent") else agent_id,
@@ -78,6 +91,16 @@ def generate_report_task(self, report_id: str, company_name: str):
                 completed_at=datetime.utcnow()
             )
             db.add(db_agent_result)
+
+            # Report tablosundaki JSONB kolonlarına da kaydet
+            if report:
+                agent_data = agent_result.get("data")
+                if agent_id == "tsg":
+                    report.tsg_data = agent_data
+                elif agent_id == "ihale":
+                    report.ihale_data = agent_data
+                elif agent_id == "news":
+                    report.news_data = agent_data
 
         # ============================================
         # Council kararını DB'ye kaydet
@@ -102,6 +125,10 @@ def generate_report_task(self, report_id: str, company_name: str):
                 completed_at=datetime.utcnow()
             )
             db.add(db_council)
+
+            # Report tablosuna council_data kaydet
+            if report:
+                report.council_data = council
 
             # Report sonuçlarını güncelle
             report_service.update_result(

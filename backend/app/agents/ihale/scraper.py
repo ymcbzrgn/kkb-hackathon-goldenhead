@@ -171,7 +171,8 @@ class ResmiGazeteScraper:
         self,
         days: int = 90,
         company_name: Optional[str] = None,
-        vergi_no: Optional[str] = None
+        vergi_no: Optional[str] = None,
+        progress_callback: Optional[callable] = None
     ) -> Dict[str, Any]:
         """
         Son N gundeki yasaklama kararlarini ara.
@@ -180,6 +181,7 @@ class ResmiGazeteScraper:
             days: Kac gun geriye taranacak (default: 90)
             company_name: Aranacak firma adi (opsiyonel)
             vergi_no: Aranacak vergi numarasi (opsiyonel)
+            progress_callback: Progress callback fonksiyonu (progress_pct, message)
 
         Returns:
             Dict: Bulunan yasaklama kararlari
@@ -198,10 +200,16 @@ class ResmiGazeteScraper:
         dates = self._generate_date_list(days)
         log(f"{len(dates)} is gunu taranacak")
 
+        total_dates = len(dates)
         for i, date in enumerate(dates):
             try:
                 date_str = date.strftime("%d.%m.%Y")
-                log(f"[{i+1}/{len(dates)}] Tarih: {date_str}")
+                log(f"[{i+1}/{total_dates}] Tarih: {date_str}")
+
+                # Progress callback - tarama ilerlemesi (15-45% arasi)
+                if progress_callback:
+                    progress_pct = 15 + int((i / total_dates) * 30)  # 15% - 45%
+                    progress_callback(progress_pct, f"Resmi Gazete taraniyor: {date_str} ({i+1}/{total_dates})")
 
                 # Cesitli Ilanlar sayfasini ac
                 yasaklamalar = await self._scrape_date(date)
@@ -222,6 +230,10 @@ class ResmiGazeteScraper:
                     "tarih": date_str,
                     "hata": str(e)
                 })
+
+        # Final progress
+        if progress_callback:
+            progress_callback(45, f"Tarama tamamlandi: {results['bulunan_ilan_sayisi']} yasaklama karari")
 
         success(f"Tarama tamamlandi: {results['bulunan_ilan_sayisi']} yasaklama karari")
         return results

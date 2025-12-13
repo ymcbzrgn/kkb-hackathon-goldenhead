@@ -209,11 +209,14 @@ async def scrape_date(page, date: datetime, temp_dir: str) -> List[Dict[str, Any
     pdfs = []
 
     try:
+        logger.info(f"[{date.strftime('%d.%m.%Y')}] Fetching URL: {url}")
         response = await page.goto(url, wait_until="networkidle", timeout=PAGE_TIMEOUT)
 
         if response and response.status == 404:
+            logger.info(f"[{date.strftime('%d.%m.%Y')}] 404 - No gazette for this date")
             return []
 
+        logger.info(f"[{date.strftime('%d.%m.%Y')}] Page loaded, status: {response.status if response else 'unknown'}")
         await asyncio.sleep(1)
 
         # Gazete metadata
@@ -224,6 +227,8 @@ async def scrape_date(page, date: datetime, temp_dir: str) -> List[Dict[str, Any
 
         # PDF linklerini bul
         links = await page.query_selector_all("a")
+        pdf_link_count = sum(1 for link in links if True)  # total links
+        logger.info(f"[{date.strftime('%d.%m.%Y')}] Found {len(links)} links on page")
 
         for link in links:
             try:

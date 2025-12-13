@@ -145,8 +145,9 @@ class IhaleAgent(BaseAgent):
 
     # Varsayilan tarama suresi (Demo: 7 gun, Production: 90 gun)
     DEFAULT_SEARCH_DAYS = 90
+    DEMO_SEARCH_DAYS = 7  # Demo mode icin kisa tarama
 
-    def __init__(self):
+    def __init__(self, demo_mode: bool = False):
         super().__init__(
             agent_id="ihale_agent",
             agent_name="Ihale Agent",
@@ -155,13 +156,17 @@ class IhaleAgent(BaseAgent):
         self.llm = LLMClient()
         self.company_matcher = IhaleCompanyMatcher()
         self.pdf_reader = IhalePDFReader()
+        self.demo_mode = demo_mode
+        self.search_days = self.DEMO_SEARCH_DAYS if demo_mode else self.DEFAULT_SEARCH_DAYS
+        if demo_mode:
+            log(f"IhaleAgent: DEMO MODE - Son {self.search_days} gun taranacak")
 
     async def run(
         self,
         company_name: str,
         vergi_no: Optional[str] = None,
         mersis_no: Optional[str] = None,
-        search_days: int = 90
+        search_days: Optional[int] = None
     ) -> AgentResult:
         """
         Ana calistirma metodu - TSG tarzi.
@@ -170,12 +175,16 @@ class IhaleAgent(BaseAgent):
             company_name: Aranacak firma adi
             vergi_no: TSG'den alinan Vergi Numarasi (opsiyonel)
             mersis_no: TSG'den alinan Mersis Numarasi (opsiyonel)
-            search_days: Kac gun geriye taranacak (default: 90)
+            search_days: Kac gun geriye taranacak (None ise instance default kullanir)
 
         Returns:
             AgentResult: Hackathon formatinda sonuc
         """
-        step(f"IHALE AGENT BASLIYOR: {company_name}")
+        # search_days verilmediyse instance default'unu kullan
+        if search_days is None:
+            search_days = self.search_days
+
+        step(f"IHALE AGENT BASLIYOR: {company_name} (Son {search_days} gun)")
         self.report_progress(5, "Ihale Agent baslatiliyor...")
 
         try:
@@ -193,9 +202,14 @@ class IhaleAgent(BaseAgent):
                 step("RESMI GAZETE TARAMASI")
                 self.report_progress(15, f"Resmi Gazete taranıyor (son {search_days} gün)...")
 
+                # Progress callback for scraper
+                def scraper_progress(progress_pct: int, message: str):
+                    self.report_progress(progress_pct, message)
+
                 async with ResmiGazeteScraper() as scraper:
                     scrape_result = await scraper.search_yasaklama_kararlari(
-                        days=search_days
+                        days=search_days,
+                        progress_callback=scraper_progress
                     )
 
                 self.report_progress(50, f"Tarama tamamlandi: {scrape_result['bulunan_ilan_sayisi']} yasaklama karari")

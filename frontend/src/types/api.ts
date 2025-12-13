@@ -40,6 +40,7 @@ export interface PaginatedResponse<T> {
 export interface CreateReportRequest {
   company_name: string;
   company_tax_no?: string;
+  demo_mode?: boolean;
 }
 
 export interface CreateReportResponse {

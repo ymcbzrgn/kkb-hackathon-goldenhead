@@ -25,6 +25,7 @@ export interface ReportListItem {
   risk_level: RiskLevel | null;
   decision: Decision | null;
   created_at: string;
+  started_at: string | null;
   completed_at: string | null;
   duration_seconds: number | null;
 }
@@ -32,11 +33,27 @@ export interface ReportListItem {
 // ==================== Report Detail ====================
 
 /**
+ * Agent progress bilgisi (DB'den gelen)
+ */
+export interface AgentProgressInfo {
+  status: string;
+  progress: number;
+  message: string;
+  updated_at: string;
+}
+
+/**
  * GET /api/reports/:id endpoint'inden dönen detaylı rapor
  */
 export interface ReportDetail extends ReportListItem {
   agent_results: AgentResults;
   council_decision: CouncilDecision | null;
+  // Agent progress'leri (canlı ilerleme takibi için)
+  agent_progresses?: {
+    tsg_agent?: AgentProgressInfo;
+    ihale_agent?: AgentProgressInfo;
+    news_agent?: AgentProgressInfo;
+  } | null;
 }
 
 // ==================== Frontend State ====================

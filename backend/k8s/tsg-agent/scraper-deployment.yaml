@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tsg-scraper
+  namespace: tsg-agent
+  labels:
+    app: tsg-scraper
+spec:
+  replicas: 1  # Tek replica (rate limiting icin)
+  selector:
+    matchLabels:
+      app: tsg-scraper
+  template:
+    metadata:
+      labels:
+        app: tsg-scraper
+    spec:
+      containers:
+      - name: scraper
+        image: tsg-scraper:v1
+        imagePullPolicy: Never  # Local build kullan
+        ports:
+        - containerPort: 8080
+
+        envFrom:
+        - configMapRef:
+            name: tsg-config
+
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "1000m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+        volumeMounts:
+        - name: debug-volume
+          mountPath: /tmp/tsg_debug
+
+      volumes:
+      - name: debug-volume
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tsg-scraper
+  namespace: tsg-agent
+  labels:
+    app: tsg-scraper
+spec:
+  selector:
+    app: tsg-scraper
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP

@@ -30,9 +30,16 @@ function getAgentName(agentId: AgentType): string {
 
 // ==================== Types ====================
 
+interface ApiAgentProgress {
+  status: string;
+  progress: number;
+  message: string;
+  updated_at: string;
+}
+
 interface AgentState {
   agents: Record<AgentType, AgentProgress>;
-  
+
   // Computed
   allCompleted: boolean;
   anyFailed: boolean;
@@ -43,6 +50,7 @@ interface AgentState {
   updateProgress: (agentId: AgentType, progress: number, message: string) => void;
   completeAgent: (agentId: AgentType, duration: number, summary?: { records_found?: number; key_findings?: string[] }) => void;
   failAgent: (agentId: AgentType, errorCode: string, errorMessage: string) => void;
+  initializeFromApi: (agentProgresses: Record<string, ApiAgentProgress> | null | undefined) => void;
   reset: () => void;
 }
 
@@ -126,6 +134,41 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         },
       },
     })),
+
+  initializeFromApi: (agentProgresses) => {
+    if (!agentProgresses) return;
+
+    set((state) => {
+      const newAgents = { ...state.agents };
+
+      // Her agent için API'den gelen progress'i uygula
+      const agentIds: AgentType[] = ['tsg_agent', 'ihale_agent', 'news_agent'];
+
+      for (const agentId of agentIds) {
+        const apiProgress = agentProgresses[agentId];
+        if (apiProgress) {
+          // API status'unu AgentStatus'a map et
+          let status: AgentStatus = 'pending';
+          if (apiProgress.status === 'running') {
+            status = apiProgress.progress >= 100 ? 'completed' : 'running';
+          } else if (apiProgress.status === 'completed') {
+            status = 'completed';
+          } else if (apiProgress.status === 'failed') {
+            status = 'failed';
+          }
+
+          newAgents[agentId] = {
+            ...newAgents[agentId],
+            status,
+            progress: apiProgress.progress,
+            message: apiProgress.message,
+          };
+        }
+      }
+
+      return { agents: newAgents };
+    });
+  },
 
   reset: () =>
     set({

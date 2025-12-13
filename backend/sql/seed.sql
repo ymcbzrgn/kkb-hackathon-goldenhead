@@ -99,15 +99,23 @@ INSERT INTO reports (
     1920
 ) ON CONFLICT DO NOTHING;
 
--- İşleme bekleyen rapor
+-- Tamamlanmış rapor - Yüksek risk
 INSERT INTO reports (
-    id, company_name, company_tax_no, status, created_at
+    id, company_name, company_tax_no, company_id, status,
+    final_score, risk_level, decision,
+    created_at, completed_at, duration_seconds
 ) VALUES (
     '660e8400-e29b-41d4-a716-446655440004',
     'Test Holding A.Ş.',
     '1111111111',
-    'processing',
-    NOW() - INTERVAL '5 minutes'
+    '550e8400-e29b-41d4-a716-446655440004',
+    'completed',
+    78,
+    'yuksek',
+    'red',
+    NOW() - INTERVAL '1 day',
+    NOW() - INTERVAL '1 day' + INTERVAL '42 minutes',
+    2520
 ) ON CONFLICT DO NOTHING;
 
 -- ============================================

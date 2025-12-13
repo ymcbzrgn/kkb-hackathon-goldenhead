@@ -55,8 +55,18 @@ export function ReportDetailPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'PDF indirilemedi');
+        // Hata yanıtı JSON olmayabilir, güvenli şekilde parse et
+        let errorMessage = 'PDF indirilemedi';
+        try {
+          const text = await response.text();
+          if (text) {
+            const error = JSON.parse(text);
+            errorMessage = error.error?.message || errorMessage;
+          }
+        } catch {
+          // JSON parse hatası, varsayılan mesajı kullan
+        }
+        throw new Error(errorMessage);
       }
 
       // PDF blob'unu al

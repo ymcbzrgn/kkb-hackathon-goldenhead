@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, ArrowRight, Building2, Calendar } from 'lucide-react';
+import { Search, ArrowRight, Building2, Calendar, Zap, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCreateReport } from '@/hooks/useCreateReport';
@@ -18,14 +18,15 @@ export function SearchForm() {
   const [endDate, setEndDate] = useState('');
   const { mutate: createReport, isPending } = useCreateReport();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent, demoMode: boolean) => {
     e.preventDefault();
-    
+
     if (!companyName.trim()) return;
 
     createReport({
       company_name: companyName.trim(),
       company_tax_no: taxNo.trim() || undefined,
+      demo_mode: demoMode,
     });
   };
 
@@ -65,7 +66,7 @@ export function SearchForm() {
             {/* Decorative gradient */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-kkb-600 via-accent-500 to-kkb-600" />
             
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={(e) => e.preventDefault()} className="space-y-5">
               {/* Company Name Input */}
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
@@ -128,36 +129,72 @@ export function SearchForm() {
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                className="w-full mt-6 h-14 text-lg font-semibold shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 transition-all"
-                disabled={!companyName.trim() || isPending}
-              >
-                {isPending ? (
-                  <>
+              {/* Submit Buttons */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                {/* Demo Analysis Button */}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  className="h-auto py-4 flex flex-col items-center gap-1 border-2 border-kkb-200 hover:border-kkb-400 hover:bg-kkb-50 transition-all"
+                  disabled={!companyName.trim() || isPending}
+                  onClick={(e) => handleSubmit(e, true)}
+                >
+                  {isPending ? (
+                    <motion.div
+                      className="w-5 h-5 border-2 border-kkb-300 border-t-kkb-600 rounded-full"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    />
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 font-semibold text-kkb-700">
+                        <Zap className="w-5 h-5" />
+                        Demo Analizi
+                      </div>
+                      <span className="text-xs text-gray-500 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        ~10 dakika
+                      </span>
+                    </>
+                  )}
+                </Button>
+
+                {/* Full Analysis Button */}
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
+                  className="h-auto py-4 flex flex-col items-center gap-1 shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 transition-all"
+                  disabled={!companyName.trim() || isPending}
+                  onClick={(e) => handleSubmit(e, false)}
+                >
+                  {isPending ? (
                     <motion.div
                       className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
                       animate={{ rotate: 360 }}
                       transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                     />
-                    Rapor Oluşturuluyor...
-                  </>
-                ) : (
-                  <>
-                    <Search className="w-5 h-5 mr-2" />
-                    Analizi Başlat
-                    <ArrowRight className="w-5 h-5 ml-2" />
-                  </>
-                )}
-              </Button>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2 font-semibold">
+                        <Search className="w-5 h-5" />
+                        Tam Analiz
+                        <ArrowRight className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs text-white/80 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        ~40 dakika
+                      </span>
+                    </>
+                  )}
+                </Button>
+              </div>
             </form>
 
             {/* Info Text */}
             <p className="text-xs text-gray-400 text-center mt-4">
-              Analiz yaklaşık 2 dakika sürmektedir. Canlı olarak takip edebilirsiniz.
+              Demo analizi hızlı sonuç için optimize edilmiştir. Tam analiz kapsamlı değerlendirme sağlar.
             </p>
           </motion.div>
         </motion.div>
