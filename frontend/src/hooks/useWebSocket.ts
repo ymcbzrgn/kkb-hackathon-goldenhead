@@ -98,6 +98,8 @@ export function useWebSocket({
           event.payload.duration_seconds,
           event.payload.summary
         );
+        // Agent tamamlandığında veriyi güncelle
+        queryClient.invalidateQueries({ queryKey: ['report', reportId] });
         break;
 
       case 'agent_failed':
@@ -164,6 +166,9 @@ export function useWebSocket({
           conditions: event.payload.conditions,
           dissent_note: event.payload.dissent_note,
         });
+        // Council kararı alındığında veriyi güncelle
+        queryClient.invalidateQueries({ queryKey: ['report', reportId] });
+        queryClient.invalidateQueries({ queryKey: ['reports'] });
         break;
     }
   }, [

@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Search, ArrowRight, Building2, Calendar, Zap, Clock } from 'lucide-react';
+import { Search, ArrowRight, Building2, Calendar, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCreateReport } from '@/hooks/useCreateReport';
@@ -136,7 +136,7 @@ export function SearchForm() {
                   type="button"
                   variant="secondary"
                   size="lg"
-                  className="h-auto py-4 flex flex-col items-center gap-1 border-2 border-kkb-200 hover:border-kkb-400 hover:bg-kkb-50 transition-all"
+                  className="h-12 border-2 border-kkb-200 hover:border-kkb-400 hover:bg-kkb-50 transition-all"
                   disabled={!companyName.trim() || isPending}
                   onClick={(e) => handleSubmit(e, true)}
                 >
@@ -147,16 +147,10 @@ export function SearchForm() {
                       transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                     />
                   ) : (
-                    <>
-                      <div className="flex items-center gap-2 font-semibold text-kkb-700">
-                        <Zap className="w-5 h-5" />
-                        Demo Analizi
-                      </div>
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        ~4 dakika
-                      </span>
-                    </>
+                    <div className="flex items-center gap-2 font-semibold text-kkb-700">
+                      <Zap className="w-5 h-5" />
+                      Hizli Analiz
+                    </div>
                   )}
                 </Button>
 
@@ -165,7 +159,7 @@ export function SearchForm() {
                   type="button"
                   variant="primary"
                   size="lg"
-                  className="h-auto py-4 flex flex-col items-center gap-1 shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 transition-all"
+                  className="h-12 shadow-lg shadow-accent-500/30 hover:shadow-xl hover:shadow-accent-500/40 transition-all"
                   disabled={!companyName.trim() || isPending}
                   onClick={(e) => handleSubmit(e, false)}
                 >
@@ -176,17 +170,11 @@ export function SearchForm() {
                       transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
                     />
                   ) : (
-                    <>
-                      <div className="flex items-center gap-2 font-semibold">
-                        <Search className="w-5 h-5" />
-                        Tam Analiz
-                        <ArrowRight className="w-5 h-5" />
-                      </div>
-                      <span className="text-xs text-white/80 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        ~40 dakika
-                      </span>
-                    </>
+                    <div className="flex items-center gap-2 font-semibold">
+                      <Search className="w-5 h-5" />
+                      Tam Analiz
+                      <ArrowRight className="w-5 h-5" />
+                    </div>
                   )}
                 </Button>
               </div>
@@ -194,7 +182,7 @@ export function SearchForm() {
 
             {/* Info Text */}
             <p className="text-xs text-gray-400 text-center mt-4">
-              Demo analizi hızlı sonuç için optimize edilmiştir. Tam analiz kapsamlı değerlendirme sağlar.
+              Hizli analiz temel bilgileri toplar. Tam analiz kapsamli degerlendirme saglar.
             </p>
           </motion.div>
         </motion.div>

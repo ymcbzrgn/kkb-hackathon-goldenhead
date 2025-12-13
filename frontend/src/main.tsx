@@ -8,8 +8,11 @@ import './styles/globals.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 30, // 30 seconds (rapor tamamlaninca hemen guncellenmesi icin)
+      staleTime: 0, // Her zaman güncel veri - stale data sorunu çözümü
+      gcTime: 1000 * 60 * 5, // 5 dakika cache (eskiden cacheTime)
       retry: 1,
+      refetchOnMount: true,
+      refetchOnWindowFocus: true,
     },
   },
 })

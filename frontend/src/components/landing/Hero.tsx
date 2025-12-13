@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'framer-motion';
-import { Sparkles, Zap, Shield } from 'lucide-react';
+import { Zap, Shield } from 'lucide-react';
 import { fadeInUp, staggerContainer } from '@/utils/animations';
 
 export function Hero() {
@@ -130,18 +130,6 @@ export function Hero() {
               </div>
             </motion.div>
 
-            <motion.div 
-              className="flex items-center gap-3 px-5 py-3 bg-white/10 backdrop-blur-sm rounded-xl border border-white/10"
-              whileHover={{ scale: 1.05, backgroundColor: "rgba(255,255,255,0.15)" }}
-            >
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <div className="text-left">
-                <div className="text-2xl font-bold text-white">~2dk</div>
-                <div className="text-xs text-white/60">Analiz Süresi</div>
-              </div>
-            </motion.div>
           </motion.div>
         </motion.div>
       </div>

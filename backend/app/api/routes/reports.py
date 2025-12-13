@@ -403,12 +403,45 @@ async def export_pdf(
     if report.agent_results:
         for result in report.agent_results:
             if result.agent_id:
-                report_data["agent_results"][result.agent_id] = {
+                # agent_id'den "_agent" suffix'ini kaldır (tsg_agent -> tsg)
+                agent_key = result.agent_id.replace("_agent", "")
+                report_data["agent_results"][agent_key] = {
                     "summary": result.summary,
                     "key_findings": result.key_findings,
                     "warning_flags": result.warning_flags,
                     "data": result.data
                 }
+    else:
+        # FALLBACK: agent_results tablosu boşsa, JSONB alanlarından oluştur
+        # TSG
+        if report.tsg_data:
+            report_data["agent_results"]["tsg"] = {
+                "status": report.tsg_data.get("status", "completed") if isinstance(report.tsg_data, dict) else "completed",
+                "data": report.tsg_data,
+                "summary": None,
+                "key_findings": [],
+                "warning_flags": []
+            }
+
+        # İhale
+        if report.ihale_data:
+            report_data["agent_results"]["ihale"] = {
+                "status": "completed",
+                "data": report.ihale_data,
+                "summary": None,
+                "key_findings": [],
+                "warning_flags": ["TIMEOUT"] if isinstance(report.ihale_data, dict) and report.ihale_data.get("timeout") else []
+            }
+
+        # News
+        if report.news_data:
+            report_data["agent_results"]["news"] = {
+                "status": "completed",
+                "data": report.news_data,
+                "summary": None,
+                "key_findings": [],
+                "warning_flags": []
+            }
 
     # 6. Council kararını ekle
     if report.council_decision:
