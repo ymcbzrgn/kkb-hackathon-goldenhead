@@ -153,7 +153,6 @@ Ticaret Sicili Gazetesi'nden firma bilgilerini otomatik çıkarır.
 - 🌐 Otomatik TSG portal girişi
 - 📰 Akıllı ilan seçimi (kuruluş/tescil öncelikli)
 - 📸 Gazete sayfası screenshot
-- 👁️ Vision AI ile gazete okuma (qwen3-omni-30b)
 
 **Çıkarılan 8 Başlık:**
 
@@ -368,7 +367,6 @@ Resmi Gazete'den firma hakkında yasaklama kararlarını arar.
 | Model | Provider | Kullanım |
 |-------|----------|----------|
 | **gpt-oss-120b** | KKB Kloudeks | Council konuşmaları, rapor yazma, sentiment analizi |
-| **qwen3-omni-30b** | KKB Kloudeks | Vision AI - PDF ve görsel okuma |
 | **qwen3-embedding-8b** | KKB Kloudeks | RAG için text embedding |
 
 ### Veritabanları
