@@ -623,10 +623,30 @@ TICARET SICIL BILGILERI:
 
             # ONEMLI: Toplam karar sayisi Resmi Gazete'deki GENEL yasaklamalari gosterir
             # Firma icin onemli olan "Eslesen Karar" dir - bu firmaya ait yasaklama sayisi
+            yasaklama_bulundu = ihale_data.get("yasaklama_bulundu", False)
+            yasaklama_notu = ihale_data.get("yasaklama_notu", "")
+
             if eslesen > 0:
                 ihale_aciklama = f"BU FIRMAYA AIT {eslesen} YASAKLAMA KARARI BULUNDU!"
+            elif yasaklama_bulundu or len(yasaklamalar) > 0:
+                # Yasaklama kayıtları var ama firma eşleştirmesi yapılamadı
+                ihale_aciklama = f"UYARI: {len(yasaklamalar)} adet yasaklama kaydı bulundu, ancak firma eşleştirmesi doğrulanamadı. Manuel inceleme önerilir!"
             else:
                 ihale_aciklama = f"Bu firmaya ait yasaklama karari BULUNMADI. (Resmi Gazete'de toplam {toplam} karar tarandı, hicbiri bu firmaya ait degil)"
+
+            # Yasaklama detaylarını göster (varsa)
+            yasaklama_detay = ""
+            if yasaklamalar and len(yasaklamalar) > 0:
+                yasaklama_detay = "\n- BULUNAN YASAKLAMA KAYITLARI:"
+                for i, y in enumerate(yasaklamalar[:5], 1):  # İlk 5 kayıt
+                    tarih = y.get("tarih", y.get("tarih_iso", "?"))
+                    conf = y.get("match_confidence", 0)
+                    pdf_url = y.get("pdf_url", "")
+                    yasaklama_detay += f"\n  {i}. Tarih: {tarih}, Confidence: {conf:.2f}"
+                    if pdf_url:
+                        yasaklama_detay += f", PDF: {pdf_url}"
+                if len(yasaklamalar) > 5:
+                    yasaklama_detay += f"\n  ... ve {len(yasaklamalar) - 5} kayıt daha"
 
             parts.append(f"""
 IHALE DURUMU:
@@ -636,7 +656,7 @@ IHALE DURUMU:
 - Sonuc: {ihale_aciklama}
 - Risk Degerlendirmesi: {risk}
 - Yasaklayan Kurum: {yasaklayan_kurum}
-- Yasak Suresi: {yasak_suresi}""")
+- Yasak Suresi: {yasak_suresi}{yasaklama_detay}""")
         else:
             parts.append("\nIHALE DURUMU: Veri bulunamadi!")
 

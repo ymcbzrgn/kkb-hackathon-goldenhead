@@ -14,12 +14,17 @@ HACKATHON GEREKSINIMLERI:
 3. 12 baslik formatinda sonuc dondur
 
 KAYNAK: resmigazete.gov.tr -> Cesitli Ilanlar -> Yasaklama Kararlari
+
+TARIH ARALIGI DESTEGI:
+- date_from, date_to parametreleri ile belirli tarih araligi tarama
+- Tarih formati: YYYY-MM-DD (ornek: "2024-01-01")
 """
 import asyncio
 import json
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+from app.core.config import settings
 from app.agents.base_agent import BaseAgent, AgentResult
 from app.agents.ihale.scraper import ResmiGazeteScraper
 from app.agents.ihale.pdf_reader import IhalePDFReader
@@ -141,17 +146,10 @@ class IhaleAgent(BaseAgent):
     """
 
     # ============================================
-    # FULL MODE: Sınırsız süre, MAX araştırma
+    # Execution time limits
     # ============================================
-    MAX_EXECUTION_TIME = 3600  # 60 dakika (sınırsız tarama için)
-    DEFAULT_SEARCH_DAYS = 1095  # 3 yıl geriye (çok kapsamlı)
-
-    # ============================================
-    # DEMO MODE: 150 saniye (orchestrator kalan süreyi verir)
-    # Paralel çalışır, TSG'den sonra başlar
-    # ============================================
-    DEMO_MAX_EXECUTION_TIME = 150  # 2.5 dakika - orchestrator tarafından kontrol edilir
-    DEMO_SEARCH_DAYS = 365  # 1 yıl - demo için kısaltıldı
+    MAX_EXECUTION_TIME = 3600  # 60 dakika (full mode)
+    DEMO_MAX_EXECUTION_TIME = 240  # 4 dakika (demo mode) - 10x pipeline için artırıldı
 
     def __init__(self, demo_mode: bool = False):
         super().__init__(
@@ -164,6 +162,9 @@ class IhaleAgent(BaseAgent):
         self.pdf_reader = IhalePDFReader()
         self.demo_mode = demo_mode
 
+        # Config'den profil bazli ayarlari al
+        ihale_config = settings.profile_config.ihale
+
         # Partial results - timeout durumunda kullanılacak
         self._partial_results = {
             "taranan_gun_sayisi": 0,
@@ -172,22 +173,28 @@ class IhaleAgent(BaseAgent):
             "eslesen_karar": 0
         }
 
-        # Demo/Full mode parametreleri
+        # Demo/Full mode parametreleri (config'den)
         if demo_mode:
-            self.search_days = self.DEMO_SEARCH_DAYS
+            self.search_days = ihale_config.search_days_default  # Profil bazli (60/90/180)
             self.max_execution_time = self.DEMO_MAX_EXECUTION_TIME
             log(f"IhaleAgent: DEMO MODE - Son {self.search_days} gun, max {self.max_execution_time}s")
         else:
-            self.search_days = self.DEFAULT_SEARCH_DAYS
+            self.search_days = ihale_config.search_days_full  # 3 yil (1095 gun)
             self.max_execution_time = self.MAX_EXECUTION_TIME
             log(f"IhaleAgent: FULL MODE - Son {self.search_days} gun, max {self.max_execution_time}s")
+
+        # PDF concurrent limit (config'den)
+        self._max_concurrent_pdf = ihale_config.max_concurrent_pdf
+        log(f"IhaleAgent: OCR={ihale_config.ocr.dpi}dpi, max_concurrent_pdf={self._max_concurrent_pdf}")
 
     async def run(
         self,
         company_name: str,
         vergi_no: Optional[str] = None,
         mersis_no: Optional[str] = None,
-        search_days: Optional[int] = None
+        search_days: Optional[int] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None
     ) -> AgentResult:
         """
         Ana calistirma metodu - TSG tarzi.
@@ -197,21 +204,27 @@ class IhaleAgent(BaseAgent):
             vergi_no: TSG'den alinan Vergi Numarasi (opsiyonel)
             mersis_no: TSG'den alinan Mersis Numarasi (opsiyonel)
             search_days: Kac gun geriye taranacak (None ise instance default kullanir)
+            date_from: Baslangic tarihi (YYYY-MM-DD format, opsiyonel)
+            date_to: Bitis tarihi (YYYY-MM-DD format, opsiyonel)
 
         Returns:
             AgentResult: Hackathon formatinda sonuc
         """
-        # search_days verilmediyse instance default'unu kullan
-        if search_days is None:
-            search_days = self.search_days
+        # Tarama modu belirleme
+        if date_from and date_to:
+            mode_desc = f"Tarih araligi: {date_from} - {date_to}"
+        else:
+            if search_days is None:
+                search_days = self.search_days
+            mode_desc = f"Son {search_days} gun"
 
-        step(f"IHALE AGENT BASLIYOR: {company_name} (Son {search_days} gun, max {self.max_execution_time}s)")
+        step(f"IHALE AGENT BASLIYOR: {company_name} ({mode_desc}, max {self.max_execution_time}s)")
         self.report_progress(5, "Ihale Agent baslatiliyor...")
 
         try:
             # Timeout wrapper - max_execution_time sonunda otomatik dur
             return await asyncio.wait_for(
-                self._run_internal(company_name, vergi_no, mersis_no, search_days),
+                self._run_internal(company_name, vergi_no, mersis_no, search_days, date_from, date_to),
                 timeout=self.max_execution_time
             )
 
@@ -228,7 +241,9 @@ class IhaleAgent(BaseAgent):
         company_name: str,
         vergi_no: Optional[str],
         mersis_no: Optional[str],
-        search_days: int
+        search_days: Optional[int],
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None
     ) -> AgentResult:
         """Internal run method - timeout wrapper tarafından çağrılır."""
         # Reset partial results
@@ -252,7 +267,10 @@ class IhaleAgent(BaseAgent):
 
                 # 2. Resmi Gazete Taramasi
                 step("RESMI GAZETE TARAMASI")
-                self.report_progress(15, f"Resmi Gazete taranıyor (son {search_days} gün)...")
+                if date_from and date_to:
+                    self.report_progress(15, f"Resmi Gazete taranıyor ({date_from} - {date_to})...")
+                else:
+                    self.report_progress(15, f"Resmi Gazete taranıyor (son {search_days} gün)...")
 
                 # Progress callback for scraper - also updates partial results
                 def scraper_progress(progress_pct: int, message: str):
@@ -268,6 +286,8 @@ class IhaleAgent(BaseAgent):
                 async with ResmiGazeteScraper() as scraper:
                     scrape_result = await scraper.search_yasaklama_kararlari(
                         days=search_days,
+                        date_from=date_from,
+                        date_to=date_to,
                         progress_callback=scraper_progress
                     )
 
@@ -286,30 +306,60 @@ class IhaleAgent(BaseAgent):
                 eslesen_yasaklama = None
 
                 if yasaklama_listesi:
-                    # PDF/HTML iceriklerini oku ve yapisal veri cikar
+                    # PDF/HTML iceriklerini PARALEL oku (config'den: light=2, standard=4, aggressive=6)
+                    semaphore = asyncio.Semaphore(self._max_concurrent_pdf)
+
+                    async def process_single_yasaklama(idx: int, yasaklama: Dict) -> Dict:
+                        """Tek bir yasaklama kaydını işle (semaphore ile rate limited)."""
+                        async with semaphore:
+                            # PDF veya HTML icerigini isle
+                            if yasaklama.get("pdf_path"):
+                                pdf_result = await self.pdf_reader.read_yasaklama_karari(
+                                    yasaklama["pdf_path"]
+                                )
+                                yasaklama["yapisal_veri"] = pdf_result.get("yapisal_veri", {})
+                                yasaklama["ham_metin"] = pdf_result.get("ham_metin", "")
+
+                            elif yasaklama.get("pdf_content"):
+                                html_result = await self.pdf_reader.read_html_content(
+                                    yasaklama["pdf_content"]
+                                )
+                                yasaklama["yapisal_veri"] = html_result.get("yapisal_veri", {})
+                                yasaklama["ham_metin"] = html_result.get("ham_metin", "")
+
+                            return yasaklama
+
+                    # Paralel PDF okuma
+                    self.report_progress(55, f"PDF'ler paralel okunuyor ({len(yasaklama_listesi)} adet, max {self._max_concurrent_pdf} concurrent)...")
+
+                    tasks = [
+                        process_single_yasaklama(i, yasaklama)
+                        for i, yasaklama in enumerate(yasaklama_listesi)
+                    ]
+                    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                    # Hatalı sonuçları filtrele VE LOGLA
                     processed_list = []
-                    for i, yasaklama in enumerate(yasaklama_listesi):
-                        self.report_progress(
-                            55 + int((i / len(yasaklama_listesi)) * 20),
-                            f"PDF okuma {i+1}/{len(yasaklama_listesi)}..."
-                        )
+                    failed_count = 0
+                    for i, item in enumerate(raw_results):
+                        if isinstance(item, Exception):
+                            failed_count += 1
+                            warn(f"PDF işleme hatası #{i}: {type(item).__name__}: {item}")
+                        elif isinstance(item, dict):
+                            processed_list.append(item)
+                        else:
+                            failed_count += 1
+                            warn(f"PDF işleme beklenmeyen sonuç #{i}: {type(item)}")
 
-                        # PDF veya HTML icerigini isle
-                        if yasaklama.get("pdf_path"):
-                            pdf_result = await self.pdf_reader.read_yasaklama_karari(
-                                yasaklama["pdf_path"]
-                            )
-                            yasaklama["yapisal_veri"] = pdf_result.get("yapisal_veri", {})
-                            yasaklama["ham_metin"] = pdf_result.get("ham_metin", "")
+                    # Tüm PDF'ler başarısız olduysa uyarı
+                    if failed_count > 0:
+                        warn(f"PDF okuma: {failed_count}/{len(yasaklama_listesi)} başarısız")
+                    if len(processed_list) == 0 and len(yasaklama_listesi) > 0:
+                        error(f"UYARI: Tüm PDF'ler başarısız oldu! ({len(yasaklama_listesi)} adet)")
+                        # Partial results'a not ekle
+                        self._partial_results["pdf_warning"] = f"Tüm PDF'ler ({len(yasaklama_listesi)}) okunamadı"
 
-                        elif yasaklama.get("pdf_content"):
-                            html_result = await self.pdf_reader.read_html_content(
-                                yasaklama["pdf_content"]
-                            )
-                            yasaklama["yapisal_veri"] = html_result.get("yapisal_veri", {})
-                            yasaklama["ham_metin"] = html_result.get("ham_metin", "")
-
-                        processed_list.append(yasaklama)
+                    self.report_progress(75, f"PDF okuma tamamlandı: {len(processed_list)}/{len(yasaklama_listesi)} başarılı")
 
                     # Firma eslestirme
                     eslesen_yasaklama = await self.company_matcher.find_matching_yasaklama(
@@ -335,15 +385,35 @@ class IhaleAgent(BaseAgent):
                 # 5. Sonuc olustur
                 step("SONUC HAZIRLANIYOR")
 
+                # Scraper'dan gelen yasaklama listesi
+                yasaklamalar_raw = scrape_result.get("yasaklama_kararlari", [])
+
                 result_data = {
                     "firma_adi": company_name,
                     "vergi_no": vergi_no,
                     "taranan_gun_sayisi": scrape_result["taranan_gun_sayisi"],
                     "bulunan_toplam_yasaklama": scrape_result["bulunan_ilan_sayisi"],
                     **analysis,
+                    # YENİ: Yasaklama kayıtlarını da ekle (council görebilsin)
+                    "yasaklamalar": [
+                        {
+                            "tarih": y.get("tarih"),
+                            "tarih_iso": y.get("tarih_iso"),
+                            "pdf_url": y.get("pdf_url"),
+                            "match_confidence": y.get("match_confidence"),
+                            "gazete_metadata": y.get("gazete_metadata")
+                        }
+                        for y in yasaklamalar_raw
+                    ],
                     "sorgu_tarihi": datetime.now().isoformat(),
                     "kaynak": "Resmi Gazete - resmigazete.gov.tr"
                 }
+
+                # KRITIK: Eğer yasaklama bulunduysa yasak_durumu True olmalı
+                # (LLM firma eşleştirme yapamasa bile, kayıtlar var)
+                if len(yasaklamalar_raw) > 0 and not result_data.get("yasak_durumu"):
+                    result_data["yasaklama_bulundu"] = True
+                    result_data["yasaklama_notu"] = f"{len(yasaklamalar_raw)} adet yasaklama kaydı bulundu (firma eşleştirmesi yapılamadı)"
 
                 self.report_progress(100, "Ihale kontrolu tamamlandi")
 

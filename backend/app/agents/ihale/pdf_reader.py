@@ -27,6 +27,7 @@ import tempfile
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
+from app.core.config import settings
 from app.agents.ihale.logger import log, step, success, error, warn, debug, Timer
 
 
@@ -35,15 +36,17 @@ class IhalePDFReader:
     Ihale Yasaklama Karari PDF okuyucu.
 
     ONEMLI: PyMuPDF KULLANILMAZ! Her zaman Tesseract OCR kullanilir.
-    Yatay sayfalar icin 0, 90, 180, 270 derece rotasyon denenir.
+    Yatay sayfalar icin rotasyonlar config'e gore denenir.
+
+    OCR Ayarlari (config.py profile'dan):
+    - DPI: light_16gb=150, standard_24gb=200, aggressive=300
+    - Rotasyonlar: light_16gb=[0,180], standard_24gb=[0,90,180], aggressive=[0,90,180,270]
+    - Diller: light_16gb=["tur"], standard_24gb=["tur"], aggressive=["tur","eng"]
 
     Kullanim:
         reader = IhalePDFReader()
         result = await reader.read_yasaklama_karari(pdf_path)
     """
-
-    # OCR icin minimum kabul edilebilir text uzunlugu
-    MIN_TEXT_THRESHOLD = 200
 
     # Regex pattern'lari (yasaklama karari alanlari icin)
     # OCR hatalarina karsi esnek pattern'lar
@@ -159,6 +162,9 @@ class IhalePDFReader:
 
     def __init__(self):
         self._temp_dir = tempfile.mkdtemp(prefix="ihale_ocr_")
+        # OCR ayarlarini config'den al (profil bazli)
+        self._ocr_config = settings.profile_config.ihale.ocr
+        log(f"OCR Config: DPI={self._ocr_config.dpi}, Rotasyonlar={self._ocr_config.rotations}, Diller={self._ocr_config.languages}")
 
     async def read_yasaklama_karari(
         self,
@@ -267,8 +273,12 @@ class IhalePDFReader:
         """
         Tesseract OCR ile PDF'den text cikar.
 
-        ONEMLI: Yatay sayfalar icin 0, 90, 180, 270 derece rotasyon denenir!
-        En cok text ureten rotasyon secilir.
+        OCR Ayarlari config.py'den alinir (profil bazli):
+        - DPI: light_16gb=150 (hizli), aggressive=300 (kaliteli)
+        - Rotasyonlar: light_16gb=[0,180] (2 deneme), aggressive=[0,90,180,270] (4 deneme)
+        - Diller: light_16gb=["tur"] (1 dil), aggressive=["tur","eng"] (2 dil)
+
+        Performans: light_16gb = 2 OCR/sayfa, aggressive = 8 OCR/sayfa
 
         Args:
             pdf_path: PDF dosya yolu
@@ -280,30 +290,31 @@ class IhalePDFReader:
             from pdf2image import convert_from_path
             import pytesseract
 
-            log("PDF sayfalari goruntulere donusturuluyor...")
+            ocr = self._ocr_config
+            log(f"PDF → Image donusumu (DPI={ocr.dpi})...")
 
-            # PDF'i goruntulere donustur (yuksek DPI = daha iyi OCR)
-            images = convert_from_path(pdf_path, dpi=300)
+            # PDF'i goruntulere donustur (profil DPI kullan)
+            images = convert_from_path(pdf_path, dpi=ocr.dpi)
 
             text_parts = []
 
             for i, image in enumerate(images):
-                log(f"OCR yapiliyor: Sayfa {i + 1}/{len(images)} (rotasyon deneniyor)")
+                log(f"OCR: Sayfa {i + 1}/{len(images)} ({len(ocr.rotations)} rotasyon, {len(ocr.languages)} dil)")
 
-                # Her rotasyon icin dene
+                # Her rotasyon icin dene (config'den)
                 best_text = ""
                 best_rotation = 0
 
-                for rotation in [0, 90, 180, 270]:
+                for rotation in ocr.rotations:
                     # Rotasyon uygula
                     if rotation > 0:
                         rotated_image = image.rotate(rotation, expand=True)
                     else:
                         rotated_image = image
 
-                    # OCR yap (Turkce yoksa Ingilizce)
+                    # OCR yap (config'deki dilleri dene)
                     page_text = None
-                    for lang in ['tur', 'eng']:
+                    for lang in ocr.languages:
                         try:
                             page_text = pytesseract.image_to_string(
                                 rotated_image,
@@ -319,13 +330,13 @@ class IhalePDFReader:
                         best_text = page_text
                         best_rotation = rotation
 
-                        # Eger yeterince uzun text bulduysa dur
-                        if len(best_text.strip()) > self.MIN_TEXT_THRESHOLD:
+                        # Eger yeterince uzun text bulduysa dur (config threshold)
+                        if len(best_text.strip()) > ocr.min_text_threshold:
                             break
 
                 if best_text:
                     if best_rotation > 0:
-                        debug(f"Sayfa {i+1}: {best_rotation} derece rotasyon kullanildi")
+                        debug(f"Sayfa {i+1}: {best_rotation}° rotasyon kullanildi")
                     text_parts.append(f"--- Sayfa {i + 1} ---\n{best_text}")
 
             return "\n\n".join(text_parts) if text_parts else None

@@ -44,8 +44,9 @@ class AgentResult(Base):
 
     # Özet
     summary = Column(Text)
-    key_findings = Column(JSONB, default=list)  # Mutable default fix
-    warning_flags = Column(JSONB, default=list)  # Mutable default fix
+    # NOTE: default=list yerine default=None kullanıldı (SQLAlchemy mutable default anti-pattern)
+    key_findings = Column(JSONB, default=None, nullable=True)
+    warning_flags = Column(JSONB, default=None, nullable=True)
 
     # Performans
     started_at = Column(DateTime(timezone=True))
@@ -86,7 +87,8 @@ class CouncilDecision(Base):
     consensus = Column(Float)  # 0.00 - 1.00 (numeric in DB)
 
     # Karar Detayları
-    conditions = Column(JSONB, default=list)  # Mutable default fix
+    # NOTE: default=list yerine default=None kullanıldı (SQLAlchemy mutable default anti-pattern)
+    conditions = Column(JSONB, default=None, nullable=True)
     summary = Column(Text)  # DB'de var
 
     # Bireysel Skorlar

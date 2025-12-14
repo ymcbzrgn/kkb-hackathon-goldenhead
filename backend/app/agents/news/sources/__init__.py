@@ -43,6 +43,12 @@ from app.agents.news.sources.bigpara_scraper import BigparaScraper
 from app.agents.news.sources.ntv_scraper import NTVScraper
 from app.agents.news.sources.sozcu_scraper import SozcuScraper
 
+# Google Search (Tarih Filtreli) - DEPRECATED: Timeout sorunları
+from app.agents.news.sources.google_scraper import GoogleNewsScraper
+
+# DuckDuckGo Search (Primary) - Hızlı, rate limiting yok
+from app.agents.news.sources.duckduckgo_scraper import DuckDuckGoScraper
+
 
 __all__ = [
     "BaseNewsScraper",
@@ -60,6 +66,9 @@ __all__ = [
     # Diğer
     "NTVScraper",
     "SozcuScraper",
+    # Search Engines
+    "GoogleNewsScraper",  # DEPRECATED
+    "DuckDuckGoScraper",  # PRIMARY
 ]
 
 
@@ -113,3 +122,18 @@ def get_mainstream_scrapers():
         NTVScraper,
         SozcuScraper,
     ]
+
+
+def get_google_scraper():
+    """Google Search scraper'ı döndür (DEPRECATED - timeout sorunları)."""
+    return GoogleNewsScraper
+
+
+def get_duckduckgo_scraper():
+    """DuckDuckGo Search scraper'ı döndür (PRIMARY - hızlı, rate limiting yok)."""
+    return DuckDuckGoScraper
+
+
+def get_search_scraper():
+    """Primary search engine döndür (DuckDuckGo)."""
+    return DuckDuckGoScraper

@@ -16,7 +16,7 @@ from app.services.pdf_export import PDFExportService
 from app.models.report import Report, ReportStatus
 from app.models.council_decision import AgentResult, CouncilDecision
 # V2: Agent-level parallelism - her agent ayrı task, work-stealing
-from app.workers.agent_tasks import generate_report_task_v2
+from app.workers.agent_tasks import generate_report_task_v2, cancel_report_tasks
 
 
 class ReportCreateRequest(BaseModel):
@@ -24,6 +24,9 @@ class ReportCreateRequest(BaseModel):
     company_name: str
     company_tax_no: Optional[str] = None
     demo_mode: bool = False  # Demo mode: ~10dk, Normal: ~40dk
+    # Tarih filtreleme (YYYY-MM-DD formatında)
+    date_from: Optional[str] = None  # Başlangıç tarihi (örn: "2023-01-01")
+    date_to: Optional[str] = None    # Bitiş tarihi (örn: "2024-12-31")
 
 
 router = APIRouter()
@@ -72,7 +75,9 @@ async def create_report(
     generate_report_task_v2.delay(
         report_id=str(report.id),
         company_name=request.company_name,
-        demo_mode=request.demo_mode
+        demo_mode=request.demo_mode,
+        date_from=request.date_from,
+        date_to=request.date_to
     )
 
     return {
@@ -306,8 +311,7 @@ async def delete_report(
     db: Session = Depends(get_db)
 ):
     """
-    Raporu siler.
-    İşlemi devam eden rapor silinemez.
+    Raporu siler ve çalışan task'ları iptal eder.
     """
     # UUID validation
     try:
@@ -328,6 +332,16 @@ async def delete_report(
     report_service = ReportService(db)
 
     try:
+        # Önce çalışan task'ları iptal et
+        cancel_result = {"cancelled": 0, "task_ids": []}
+        try:
+            cancel_result = cancel_report_tasks(report_id)
+            print(f"[DELETE_REPORT] Cancelled {cancel_result['cancelled']} tasks for report {report_id}")
+        except Exception as e:
+            # Task iptal hatası silme işlemini engellemesin
+            print(f"[DELETE_REPORT] Error cancelling tasks: {e}")
+
+        # Raporu sil
         deleted = report_service.delete(report_uuid)
 
         if not deleted:
@@ -347,7 +361,8 @@ async def delete_report(
             "success": True,
             "data": {
                 "deleted": True,
-                "id": report_id
+                "id": report_id,
+                "tasks_cancelled": cancel_result["cancelled"]
             },
             "error": None
         }

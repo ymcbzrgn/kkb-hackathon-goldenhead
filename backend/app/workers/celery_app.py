@@ -4,9 +4,17 @@ Celery Application Configuration
 Basit Sıralı Rapor İşleme:
 - Bir rapor tamamen bitsin, sonra diğeri başlasın
 - TSG -> News + İhale (paralel) -> Council
+
+Pipeline Profilleri (PIPELINE_PROFILE env var):
+- light_16gb: 4 worker, 12GB memory limit
+- standard_24gb: 8 worker, 20GB memory limit
+- aggressive: 12 worker, 28GB memory limit
 """
 from celery import Celery
 from app.core.config import settings
+
+# Profil bazlı ayarları al
+profile = settings.profile_config
 
 celery_app = Celery(
     "firma_istihbarat",
@@ -15,7 +23,7 @@ celery_app = Celery(
     include=["app.workers.tasks", "app.workers.agent_tasks"]
 )
 
-# Celery configuration
+# Celery configuration - profil bazlı dinamik ayarlar
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -28,7 +36,11 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
-    worker_concurrency=4,  # 4 paralel task
+    # Dinamik concurrency: Pipeline profiline göre ayarlanır
+    # light_16gb=4, standard_24gb=8, aggressive=12
+    worker_concurrency=profile.celery_concurrency,
+    # Memory limit: Worker başına max RAM (KB cinsinden)
+    worker_max_memory_per_child=profile.memory_limit_mb * 1024,
 )
 
 # Task routes

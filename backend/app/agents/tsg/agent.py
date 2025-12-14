@@ -181,12 +181,26 @@ class TSGAgent(BaseAgent):
                     success("Login basarili!")
                     self.report_progress(25, "Giris basarili! Firma araniyor...")
 
-                    # 2. Firma ara (şehir parametresi ile)
+                    # 2. Firma ara (şehir parametresi ile) - HOTFIX: Multi-city retry
                     log(f"Firma araniyor: {company_name} (sehir: {company_city})")
                     search_results = await scraper.search_company(company_name, city=company_city)
 
+                    # HOTFIX: İlk şehirde bulunamazsa diğer şehirleri dene
                     if not search_results:
-                        warn("TSG'de kayit bulunamadi")
+                        fallback_cities = ["İSTANBUL", "ANKARA", "İZMİR", "BURSA", "ANTALYA", "KOCAELİ", "GAZİANTEP", "KONYA"]
+                        # Zaten denenen şehri çıkar
+                        fallback_cities = [c for c in fallback_cities if c.upper() != (company_city or "").upper()]
+
+                        for fallback_city in fallback_cities[:4]:  # Max 4 şehir dene (hız için)
+                            log(f"Fallback arama: {fallback_city}")
+                            self.report_progress(30, f"Araniyor: {fallback_city}...")
+                            search_results = await scraper.search_company(company_name, city=fallback_city)
+                            if search_results:
+                                log(f"Firma {fallback_city}'de bulundu!")
+                                break
+
+                    if not search_results:
+                        warn("TSG'de kayit bulunamadi (tum sehirler denendi)")
                         return self._create_not_found_result(company_name)
 
                     success(f"{len(search_results)} ilan bulundu!")

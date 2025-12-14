@@ -80,7 +80,8 @@ class Report(Base):
     external_notes = Column(Text)
 
     # Metadata (esnek alan)
-    meta_data = Column("metadata", JSONB, default=dict)  # Mutable default fix
+    # NOTE: default=dict yerine default=None kullanıldı (SQLAlchemy mutable default anti-pattern)
+    meta_data = Column("metadata", JSONB, default=None, nullable=True)
 
     # Reserved Kolonlar
     reserved_text_1 = Column(Text)

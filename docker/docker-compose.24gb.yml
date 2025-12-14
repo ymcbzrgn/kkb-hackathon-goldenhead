@@ -1,0 +1,33 @@
+# Docker Compose Override - 24GB RAM Profile
+# KKB Firma İstihbarat Sistemi
+#
+# Kullanım:
+#   docker-compose -f docker-compose.yml -f docker-compose.24gb.yml up -d
+#
+# Veya .env dosyasında:
+#   PIPELINE_PROFILE=standard_24gb
+
+version: '3.8'
+
+services:
+  # ============================================
+  # Celery Worker - 24GB RAM Profile
+  # ============================================
+  celery-worker:
+    environment:
+      # 24GB profil
+      - PIPELINE_PROFILE=standard_24gb
+    deploy:
+      resources:
+        limits:
+          # 24GB sistemler için: 20GB memory limit
+          memory: 20G
+        reservations:
+          memory: 8G
+
+  # ============================================
+  # Qdrant - 24GB Profile için daha fazla cache
+  # ============================================
+  qdrant:
+    environment:
+      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=8

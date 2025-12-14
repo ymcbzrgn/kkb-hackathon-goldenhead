@@ -51,17 +51,23 @@ class NewsAgentK8s(BaseAgent):
         """Report ID'yi set et (progress tracking için)."""
         self.report_id = report_id
 
-    async def run(self, company_name: str) -> AgentResult:
+    async def run(self, company_name: str, alternative_names: List[str] = None) -> AgentResult:
         """
         K8s News Orchestrator'ı çağır.
 
         Args:
             company_name: Firma adı
+            alternative_names: Alternatif firma isimleri (TSG'den gelen resmi ünvan vb.)
 
         Returns:
             AgentResult: Mevcut news_agent.py ile uyumlu format
         """
-        self.report_progress(5, "K8s News Orchestrator'a baglaniliyor...")
+        # Tüm isimleri birleştir
+        all_names = [company_name]
+        if alternative_names:
+            all_names.extend(alternative_names)
+
+        self.report_progress(5, f"K8s News Orchestrator'a baglaniliyor... ({len(all_names)} isim)")
 
         try:
             # Progress simulator - K8s beklerken gercekci ilerleme goster
@@ -94,6 +100,7 @@ class NewsAgentK8s(BaseAgent):
                         f"{NEWS_ORCHESTRATOR_URL}/api/news/search",
                         json={
                             "company_name": company_name,
+                            "alternative_names": alternative_names or [],  # TSG'den gelen alternatif isimler
                             "max_articles_per_source": 5,  # 3 → 5 (Quick Mode)
                             "timeout_seconds": 60,
                             "report_id": self.report_id

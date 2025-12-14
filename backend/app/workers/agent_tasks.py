@@ -11,8 +11,11 @@ TASK FLOW:
 3. Tüm agent'lar bitince Council başlar
 """
 import asyncio
+import time
+import traceback
 from datetime import datetime, timezone
 from celery import current_task, group
+from celery.signals import worker_shutdown
 from app.workers.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.services.report_service import ReportService
@@ -35,18 +38,202 @@ def get_redis():
     return redis.Redis(connection_pool=_redis_pool)
 
 
+@worker_shutdown.connect
+def cleanup_redis_pool(sender=None, **kwargs):
+    """Celery worker shutdown hook - Redis connection pool'u temizle"""
+    global _redis_pool
+    if _redis_pool is not None:
+        print("[WORKER_SHUTDOWN] Redis connection pool kapatılıyor...")
+        try:
+            _redis_pool.disconnect()
+        except Exception as e:
+            print(f"[WORKER_SHUTDOWN] Redis pool cleanup error: {e}")
+        finally:
+            _redis_pool = None
+        print("[WORKER_SHUTDOWN] Redis connection pool kapatıldı")
+
+
+def register_task_id(r, report_id: str, task_id: str, task_name: str):
+    """
+    Task ID'yi Redis'e kaydet - rapor silindiğinde iptal için.
+    Set yapısında saklıyoruz, böylece tüm task'ları kolayca bulabiliriz.
+    """
+    key = f"report_tasks:{report_id}"
+    r.sadd(key, f"{task_name}:{task_id}")
+    r.expire(key, 7200)  # 2 saat TTL
+
+
+def get_report_task_ids(report_id: str) -> list:
+    """Bir rapora ait tüm task ID'lerini getir."""
+    r = get_redis()
+    key = f"report_tasks:{report_id}"
+    task_data = r.smembers(key)
+    task_ids = []
+    for item in task_data:
+        if isinstance(item, bytes):
+            item = item.decode('utf-8')
+        # Format: "task_name:task_id"
+        parts = item.split(':', 1)
+        if len(parts) == 2:
+            task_ids.append(parts[1])
+    return task_ids
+
+
+def cancel_report_tasks(report_id: str) -> dict:
+    """
+    Bir rapora ait tüm çalışan task'ları iptal et.
+    Returns: {"cancelled": int, "task_ids": list}
+    """
+    from app.workers.celery_app import celery_app
+
+    task_ids = get_report_task_ids(report_id)
+    cancelled_count = 0
+
+    for task_id in task_ids:
+        try:
+            # Task'ı iptal et (terminate=True hemen durdurur)
+            celery_app.control.revoke(task_id, terminate=True, signal='SIGTERM')
+            cancelled_count += 1
+            print(f"[CANCEL_TASK] Revoked task {task_id} for report {report_id}")
+        except Exception as e:
+            print(f"[CANCEL_TASK] Error revoking task {task_id}: {e}")
+
+    # Redis'ten task listesini temizle
+    r = get_redis()
+    r.delete(f"report_tasks:{report_id}")
+
+    # Diğer Redis key'lerini de temizle
+    cleanup_keys = [
+        f"agent_result:{report_id}:tsg",
+        f"agent_result:{report_id}:news",
+        f"agent_result:{report_id}:news:phase1",
+        f"agent_result:{report_id}:news:phase2",
+        f"agent_result:{report_id}:ihale",
+        f"agent_result:{report_id}:ihale:phase1",
+        f"agent_result:{report_id}:ihale:phase2",
+        f"agent_result:{report_id}:council",
+        f"needs_phase2:{report_id}",
+        f"original_name:{report_id}",
+        f"resolved_name:{report_id}",
+        f"agent_completed:{report_id}:tsg",
+        f"agent_completed:{report_id}:news",
+        f"agent_completed:{report_id}:ihale",
+    ]
+    for key in cleanup_keys:
+        r.delete(key)
+
+    print(f"[CANCEL_TASK] Cancelled {cancelled_count} tasks, cleaned up Redis keys for report {report_id}")
+    return {"cancelled": cancelled_count, "task_ids": task_ids}
+
+
 def redis_get_json(r, key: str, default=None):
-    """Redis'ten JSON al - bytes decode işlemini handle et"""
-    result = r.get(key)
-    if result is None:
-        return default if default is not None else {}
-    # Redis bytes döner, decode et
-    if isinstance(result, bytes):
-        result = result.decode('utf-8')
+    """
+    Redis'ten JSON al - bytes decode işlemini handle et.
+    Hata durumunda detaylı log ve default değer döner.
+    """
     try:
+        result = r.get(key)
+        if result is None:
+            return default if default is not None else {}
+        # Redis bytes döner, decode et
+        if isinstance(result, bytes):
+            result = result.decode('utf-8')
+        # Boş string kontrolü
+        if not result or not result.strip():
+            return default if default is not None else {}
         return json.loads(result)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        print(f"[REDIS] JSON parse error for key '{key}': {e}")
+        print(f"[REDIS] Raw value (first 200 chars): {str(result)[:200] if result else 'None'}")
         return default if default is not None else {}
+    except redis.RedisError as e:
+        print(f"[REDIS] Redis error for key '{key}': {e}")
+        return default if default is not None else {}
+    except Exception as e:
+        print(f"[REDIS] Unexpected error for key '{key}': {type(e).__name__}: {e}")
+        return default if default is not None else {}
+
+
+def save_agent_result_to_db(
+    report_id: str,
+    agent_id: str,
+    status: str,
+    data: dict,
+    summary: str = None,
+    key_findings: list = None,
+    warning_flags: list = None,
+    duration_seconds: int = None,
+    error_message: str = None
+):
+    """
+    Agent sonucunu AgentResult tablosuna kaydet.
+    Tek kaynak olarak agent_results tablosunu kullanıyoruz.
+
+    Args:
+        report_id: Rapor UUID'si
+        agent_id: Agent ID (tsg_agent, news_agent, ihale_agent)
+        status: completed, failed, timeout
+        data: Agent verisi (JSONB)
+        summary: Özet metin
+        key_findings: Önemli bulgular listesi
+        warning_flags: Uyarı bayrakları listesi
+        duration_seconds: İşlem süresi
+        error_message: Hata mesajı (varsa)
+    """
+    db = None
+    try:
+        db = SessionLocal()
+
+        # Önce mevcut kaydı kontrol et (upsert mantığı)
+        existing = db.query(DBAgentResult).filter(
+            DBAgentResult.report_id == report_id,
+            DBAgentResult.agent_id == agent_id
+        ).first()
+
+        if existing:
+            # Güncelle
+            existing.status = status
+            existing.data = data
+            existing.summary = summary
+            existing.key_findings = key_findings or []
+            existing.warning_flags = warning_flags or []
+            existing.duration_seconds = duration_seconds
+            existing.error_message = error_message
+            existing.completed_at = datetime.now(timezone.utc)
+        else:
+            # Yeni kayıt
+            agent_names = {
+                "tsg_agent": "TSG Agent",
+                "news_agent": "Haber Agent",
+                "ihale_agent": "İhale Agent"
+            }
+            new_result = DBAgentResult(
+                report_id=report_id,
+                agent_id=agent_id,
+                agent_name=agent_names.get(agent_id, agent_id),
+                status=status,
+                data=data,
+                summary=summary,
+                key_findings=key_findings or [],
+                warning_flags=warning_flags or [],
+                duration_seconds=duration_seconds,
+                error_message=error_message,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc)
+            )
+            db.add(new_result)
+
+        db.commit()
+        print(f"[AGENT_TASKS] ✅ AgentResult saved: {agent_id} for report {report_id[:8]}...")
+
+    except Exception as e:
+        print(f"[AGENT_TASKS] ❌ AgentResult save error: {e}")
+        traceback.print_exc()
+        if db:
+            db.rollback()
+    finally:
+        if db:
+            db.close()
 
 
 def merge_news_results(phase1_data: dict, phase2_data: dict) -> dict:
@@ -206,6 +393,9 @@ def run_tsg_agent_task(self, report_id: str, company_name: str, demo_mode: bool 
     r = get_redis()
     resolved_name = company_name  # Default to original
 
+    # Task ID'yi kaydet (iptal için)
+    register_task_id(r, report_id, self.request.id, "tsg")
+
     try:
         # Agent'ı oluştur ve çalıştır
         from app.agents.tsg.agent import TSGAgent
@@ -244,17 +434,29 @@ def run_tsg_agent_task(self, report_id: str, company_name: str, demo_mode: bool 
                 r.setex(f"resolved_name:{report_id}", 3600, resolved_name)
                 print(f"[TSG_TASK] Resolved company name: {resolved_name}")
 
-        # DB'ye kaydet (try-finally ile güvenli)
+        # DB'ye kaydet - hem JSONB hem AgentResult tablosuna (geçiş dönemi)
         db = None
         try:
             db = SessionLocal()
             report = db.query(Report).filter(Report.id == report_id).first()
             if report:
-                report.tsg_data = result.data
+                report.tsg_data = result.data  # JSONB (deprecated, geçiş için korunuyor)
                 db.commit()
         finally:
             if db:
                 db.close()
+
+        # AgentResult tablosuna kaydet (tek kaynak - yeni standart)
+        save_agent_result_to_db(
+            report_id=report_id,
+            agent_id="tsg_agent",
+            status=result.status,
+            data=result.data,
+            summary=result.summary,
+            key_findings=result.key_findings,
+            warning_flags=result.warning_flags,
+            duration_seconds=result.duration_seconds
+        )
 
         # Event: Agent completed
         publish_event(report_id, "agent_completed", {
@@ -276,9 +478,24 @@ def run_tsg_agent_task(self, report_id: str, company_name: str, demo_mode: bool 
         if needs_phase2:
             print(f"[TSG_TASK] Phase 2 needed: '{original_name}' → '{resolved_name}'")
             r.setex(f"needs_phase2:{report_id}", 3600, "1")
-            # Phase 2 task'larını başlat (resolved_name ile)
-            run_news_agent_task.delay(report_id, resolved_name, demo_mode, False, True)  # is_phase2=True
-            run_ihale_agent_task.delay(report_id, resolved_name, demo_mode, False, True)  # is_phase2=True
+
+            # Date parametrelerini Redis'ten al (Phase 1'de kaydedildi)
+            date_from_bytes = r.get(f"date_from:{report_id}")
+            date_to_bytes = r.get(f"date_to:{report_id}")
+            date_from = date_from_bytes.decode('utf-8') if date_from_bytes else None
+            date_to = date_to_bytes.decode('utf-8') if date_to_bytes else None
+
+            # Phase 2 task'larını başlat (resolved_name ile, aynı tarih filtresi)
+            run_news_agent_task.delay(
+                report_id, resolved_name, demo_mode,
+                is_phase1=False, is_phase2=True,
+                date_from=date_from, date_to=date_to
+            )
+            run_ihale_agent_task.delay(
+                report_id, resolved_name, demo_mode,
+                is_phase1=False, is_phase2=True,
+                date_from=date_from, date_to=date_to
+            )
         else:
             print(f"[TSG_TASK] Phase 2 not needed, names match")
             r.setex(f"needs_phase2:{report_id}", 3600, "0")
@@ -306,7 +523,8 @@ def run_tsg_agent_task(self, report_id: str, company_name: str, demo_mode: bool 
 
 @celery_app.task(bind=True, max_retries=2)
 def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool = False,
-                        is_phase1: bool = True, is_phase2: bool = False):
+                        is_phase1: bool = True, is_phase2: bool = False,
+                        date_from: str = None, date_to: str = None):
     """
     News Agent task'ı - Haber toplama ve sentiment analizi
 
@@ -314,11 +532,18 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
     Phase 2: TSG'den gelen resolved_name ile arama (farklıysa)
 
     Progress: Phase 1 = %0-50, Phase 2 = %50-100
+
+    Args:
+        date_from: Başlangıç tarihi (YYYY-MM-DD)
+        date_to: Bitiş tarihi (YYYY-MM-DD)
     """
     phase_str = "Phase1" if is_phase1 else "Phase2"
     print(f"[NEWS_TASK:{phase_str}] Starting for {company_name} (report: {report_id[:8]}...)")
 
     r = get_redis()
+
+    # Task ID'yi kaydet (iptal için)
+    register_task_id(r, report_id, self.request.id, f"news_{phase_str.lower()}")
 
     # Progress offset: Phase 1 = 0, Phase 2 = 50
     progress_offset = 0 if is_phase1 else 50
@@ -365,6 +590,22 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
             agent.max_execution_time = remaining_time
             print(f"[NEWS_TASK:{phase_str}] Agent timeout set to {remaining_time:.0f}s")
 
+        # TSG verisini al ve agent'a geç (daha iyi arama varyasyonları için)
+        tsg_data = redis_get_json(r, f"agent_result:{report_id}:tsg")
+        if tsg_data and tsg_data.get("data"):
+            tsg_sonuc = tsg_data["data"].get("tsg_sonuc", {})
+            yapilandirilmis = tsg_sonuc.get("yapilandirilmis_veri", {})
+
+            # TSG verisini agent'a aktar
+            agent._tsg_data = {
+                "firma_adi": yapilandirilmis.get("Firma Unvani"),
+                "ticaret_unvani": yapilandirilmis.get("Ticaret Unvanı"),
+                "unvan": yapilandirilmis.get("Unvan"),
+                "vergi_no": yapilandirilmis.get("Vergi No"),
+                "faaliyet_konusu": yapilandirilmis.get("Faaliyet Alanı")
+            }
+            print(f"[NEWS_TASK:{phase_str}] TSG data integrated: {agent._tsg_data.get('firma_adi', 'N/A')}")
+
         agent.set_progress_callback(lambda p: adjusted_progress(p.progress, p.message))
 
         # Sadece Phase 1'de agent_started event'i gönder
@@ -380,12 +621,18 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
 
         try:
             # Timeout wrapper - kalan süre kadar bekle
+            # date_from/date_to parametreleri agent'a iletilir
             if remaining_time is not None:
                 result = loop.run_until_complete(
-                    asyncio.wait_for(agent.run(company_name), timeout=remaining_time)
+                    asyncio.wait_for(
+                        agent.run(company_name, date_from=date_from, date_to=date_to),
+                        timeout=remaining_time
+                    )
                 )
             else:
-                result = loop.run_until_complete(agent.run(company_name))
+                result = loop.run_until_complete(
+                    agent.run(company_name, date_from=date_from, date_to=date_to)
+                )
         except asyncio.TimeoutError:
             print(f"[NEWS_TASK:{phase_str}] ⏰ TIMEOUT after {remaining_time:.0f}s - using partial data")
             # Timeout - partial result oluştur
@@ -406,6 +653,19 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
         result_key = f"agent_result:{report_id}:news:{phase_key}"
         r.setex(result_key, 3600, json.dumps(result.to_dict()))
 
+        # Phase 1 bittiyse TSG'nin bitip needs_phase2 flag'i set etmesini bekle
+        # Bu race condition'ı önler: News Phase 1 biter ama TSG henüz bitmemiş olabilir
+        if is_phase1:
+            # TSG bitene kadar max 10 saniye bekle (polling)
+            for _ in range(20):  # 20 x 0.5s = max 10s
+                tsg_result = r.get(f"agent_result:{report_id}:tsg")
+                needs_phase2_flag = r.get(f"needs_phase2:{report_id}")
+                if tsg_result and needs_phase2_flag is not None:
+                    # TSG bitti ve needs_phase2 flag'i set edildi
+                    break
+                time.sleep(0.5)
+            print(f"[NEWS_TASK:Phase1] TSG wait completed, needs_phase2 flag exists: {r.get(f'needs_phase2:{report_id}')}")
+
         # Phase 2'de sonuçları birleştir ve final key'e kaydet
         if is_phase2:
             phase1_data = redis_get_json(r, f"agent_result:{report_id}:news:phase1")
@@ -420,17 +680,29 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
             }
             r.setex(f"agent_result:{report_id}:news", 3600, json.dumps(merged_result))
 
-            # DB'ye birleştirilmiş veriyi kaydet
+            # DB'ye birleştirilmiş veriyi kaydet - hem JSONB hem AgentResult
             db = None
             try:
                 db = SessionLocal()
                 report = db.query(Report).filter(Report.id == report_id).first()
                 if report:
-                    report.news_data = merged_data
+                    report.news_data = merged_data  # JSONB (deprecated, geçiş için korunuyor)
                     db.commit()
             finally:
                 if db:
                     db.close()
+
+            # AgentResult tablosuna kaydet (tek kaynak - yeni standart)
+            save_agent_result_to_db(
+                report_id=report_id,
+                agent_id="news_agent",
+                status="completed",
+                data=merged_data,
+                summary=f"Toplam {merged_data.get('toplam_haber', 0)} haber bulundu (2 aşamalı arama)",
+                key_findings=result.key_findings,
+                warning_flags=result.warning_flags,
+                duration_seconds=result.duration_seconds
+            )
 
             # Phase 2 bitti, %100 yap
             update_agent_progress(report_id, "news_agent", 100, "Haber analizi tamamlandı (2 aşama)")
@@ -444,20 +716,32 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
                 # Phase 2 yok, Phase 1 final sonuç
                 r.setex(f"agent_result:{report_id}:news", 3600, json.dumps(result.to_dict()))
 
-                # DB'ye kaydet
+                # DB'ye kaydet - hem JSONB hem AgentResult
                 db = None
                 try:
                     db = SessionLocal()
                     report = db.query(Report).filter(Report.id == report_id).first()
                     if report:
-                        report.news_data = result.data
+                        report.news_data = result.data  # JSONB (deprecated, geçiş için korunuyor)
                         db.commit()
                 finally:
                     if db:
                         db.close()
 
-                # %100 yap
+                # AgentResult tablosuna kaydet (tek kaynak - yeni standart)
                 is_timeout = result.data.get("timeout", False) if result.data else False
+                save_agent_result_to_db(
+                    report_id=report_id,
+                    agent_id="news_agent",
+                    status="completed" if not is_timeout else "completed",  # timeout da completed
+                    data=result.data,
+                    summary=result.summary,
+                    key_findings=result.key_findings,
+                    warning_flags=(result.warning_flags or []) + (["TIMEOUT"] if is_timeout else []),
+                    duration_seconds=result.duration_seconds
+                )
+
+                # %100 yap
                 timeout_msg = "Tarama tamamlandı (zaman aşımı)" if is_timeout else "Haber analizi tamamlandı"
                 update_agent_progress(report_id, "news_agent", 100, timeout_msg)
             else:
@@ -512,7 +796,8 @@ def run_news_agent_task(self, report_id: str, company_name: str, demo_mode: bool
 
 @celery_app.task(bind=True, max_retries=2)
 def run_ihale_agent_task(self, report_id: str, company_name: str, demo_mode: bool = False,
-                         is_phase1: bool = True, is_phase2: bool = False):
+                         is_phase1: bool = True, is_phase2: bool = False,
+                         date_from: str = None, date_to: str = None):
     """
     İhale Agent task'ı - Resmi Gazete yasaklama kontrolü
 
@@ -520,11 +805,18 @@ def run_ihale_agent_task(self, report_id: str, company_name: str, demo_mode: boo
     Phase 2: TSG'den gelen resolved_name ile arama (farklıysa)
 
     Progress: Phase 1 = %0-50, Phase 2 = %50-100
+
+    Args:
+        date_from: Başlangıç tarihi (YYYY-MM-DD)
+        date_to: Bitiş tarihi (YYYY-MM-DD)
     """
     phase_str = "Phase1" if is_phase1 else "Phase2"
     print(f"[IHALE_TASK:{phase_str}] Starting for {company_name} (report: {report_id[:8]}...)")
 
     r = get_redis()
+
+    # Task ID'yi kaydet (iptal için)
+    register_task_id(r, report_id, self.request.id, f"ihale_{phase_str.lower()}")
 
     # Progress offset: Phase 1 = 0, Phase 2 = 50
     progress_offset = 0 if is_phase1 else 50
@@ -586,12 +878,18 @@ def run_ihale_agent_task(self, report_id: str, company_name: str, demo_mode: boo
 
         try:
             # Timeout wrapper - kalan süre kadar bekle
+            # date_from/date_to parametreleri agent'a iletilir
             if remaining_time is not None:
                 result = loop.run_until_complete(
-                    asyncio.wait_for(agent.run(company_name), timeout=remaining_time)
+                    asyncio.wait_for(
+                        agent.run(company_name, date_from=date_from, date_to=date_to),
+                        timeout=remaining_time
+                    )
                 )
             else:
-                result = loop.run_until_complete(agent.run(company_name))
+                result = loop.run_until_complete(
+                    agent.run(company_name, date_from=date_from, date_to=date_to)
+                )
         except asyncio.TimeoutError:
             print(f"[IHALE_TASK:{phase_str}] ⏰ TIMEOUT after {remaining_time:.0f}s - using partial data")
             # Timeout - partial result oluştur
@@ -612,6 +910,19 @@ def run_ihale_agent_task(self, report_id: str, company_name: str, demo_mode: boo
         result_key = f"agent_result:{report_id}:ihale:{phase_key}"
         r.setex(result_key, 3600, json.dumps(result.to_dict()))
 
+        # Phase 1 bittiyse TSG'nin bitip needs_phase2 flag'i set etmesini bekle
+        # Bu race condition'ı önler: İhale Phase 1 biter ama TSG henüz bitmemiş olabilir
+        if is_phase1:
+            # TSG bitene kadar max 10 saniye bekle (polling)
+            for _ in range(20):  # 20 x 0.5s = max 10s
+                tsg_result = r.get(f"agent_result:{report_id}:tsg")
+                needs_phase2_flag = r.get(f"needs_phase2:{report_id}")
+                if tsg_result and needs_phase2_flag is not None:
+                    # TSG bitti ve needs_phase2 flag'i set edildi
+                    break
+                time.sleep(0.5)
+            print(f"[IHALE_TASK:Phase1] TSG wait completed, needs_phase2 flag exists: {r.get(f'needs_phase2:{report_id}')}")
+
         # Phase 2'de sonuçları birleştir ve final key'e kaydet
         if is_phase2:
             phase1_data = redis_get_json(r, f"agent_result:{report_id}:ihale:phase1")
@@ -626,17 +937,29 @@ def run_ihale_agent_task(self, report_id: str, company_name: str, demo_mode: boo
             }
             r.setex(f"agent_result:{report_id}:ihale", 3600, json.dumps(merged_result))
 
-            # DB'ye birleştirilmiş veriyi kaydet
+            # DB'ye birleştirilmiş veriyi kaydet - hem JSONB hem AgentResult
             db = None
             try:
                 db = SessionLocal()
                 report = db.query(Report).filter(Report.id == report_id).first()
                 if report:
-                    report.ihale_data = merged_data
+                    report.ihale_data = merged_data  # JSONB (deprecated, geçiş için korunuyor)
                     db.commit()
             finally:
                 if db:
                     db.close()
+
+            # AgentResult tablosuna kaydet (tek kaynak - yeni standart)
+            save_agent_result_to_db(
+                report_id=report_id,
+                agent_id="ihale_agent",
+                status="completed",
+                data=merged_data,
+                summary=f"İhale kontrolü tamamlandı (2 aşamalı arama)",
+                key_findings=result.key_findings,
+                warning_flags=result.warning_flags,
+                duration_seconds=result.duration_seconds
+            )
 
             # Phase 2 bitti, %100 yap
             update_agent_progress(report_id, "ihale_agent", 100, "İhale kontrolü tamamlandı (2 aşama)")
@@ -650,20 +973,32 @@ def run_ihale_agent_task(self, report_id: str, company_name: str, demo_mode: boo
                 # Phase 2 yok, Phase 1 final sonuç
                 r.setex(f"agent_result:{report_id}:ihale", 3600, json.dumps(result.to_dict()))
 
-                # DB'ye kaydet
+                # DB'ye kaydet - hem JSONB hem AgentResult
                 db = None
                 try:
                     db = SessionLocal()
                     report = db.query(Report).filter(Report.id == report_id).first()
                     if report:
-                        report.ihale_data = result.data
+                        report.ihale_data = result.data  # JSONB (deprecated, geçiş için korunuyor)
                         db.commit()
                 finally:
                     if db:
                         db.close()
 
-                # %100 yap
+                # AgentResult tablosuna kaydet (tek kaynak - yeni standart)
                 is_timeout = result.data.get("timeout", False) if result.data else False
+                save_agent_result_to_db(
+                    report_id=report_id,
+                    agent_id="ihale_agent",
+                    status="completed" if not is_timeout else "completed",  # timeout da completed
+                    data=result.data,
+                    summary=result.summary,
+                    key_findings=result.key_findings,
+                    warning_flags=(result.warning_flags or []) + (["TIMEOUT"] if is_timeout else []),
+                    duration_seconds=result.duration_seconds
+                )
+
+                # %100 yap
                 timeout_msg = "Tarama tamamlandı (zaman aşımı)" if is_timeout else "İhale kontrolü tamamlandı"
                 update_agent_progress(report_id, "ihale_agent", 100, timeout_msg)
             else:
@@ -759,6 +1094,9 @@ def check_and_start_council(self, report_id: str, company_name: str, demo_mode: 
     Demo mode: 4 dakika timeout - mevcut verilerle devam et
     """
     r = get_redis()
+
+    # Task ID'yi kaydet (iptal için)
+    register_task_id(r, report_id, self.request.id, "check_council")
 
     # Council zaten başladı mı?
     council_started = r.get(f"council_started:{report_id}")
@@ -898,6 +1236,9 @@ def run_council_task(self, report_id: str, company_name: str, demo_mode: bool = 
     db = None
     try:
         r = get_redis()
+
+        # Task ID'yi kaydet (iptal için)
+        register_task_id(r, report_id, self.request.id, "council")
 
         # Agent sonuçlarını al (bytes decode ile güvenli)
         tsg_data = redis_get_json(r, f"agent_result:{report_id}:tsg")
@@ -1093,7 +1434,7 @@ def run_council_task(self, report_id: str, company_name: str, demo_mode: bool = 
 
 
 @celery_app.task(bind=True, max_retries=3)
-def generate_report_task_v2(self, report_id: str, company_name: str, demo_mode: bool = False):
+def generate_report_task_v2(self, report_id: str, company_name: str, demo_mode: bool = False, date_from: str = None, date_to: str = None):
     """
     İki aşamalı paralel rapor işleme:
 
@@ -1104,8 +1445,10 @@ def generate_report_task_v2(self, report_id: str, company_name: str, demo_mode: 
         report_id: Rapor ID
         company_name: Firma adı (kullanıcının yazdığı)
         demo_mode: Demo mode (~10dk) veya Normal mode
+        date_from: Başlangıç tarihi (YYYY-MM-DD)
+        date_to: Bitiş tarihi (YYYY-MM-DD)
     """
-    print(f"[REPORT_V2] Starting report: {company_name}, demo_mode={demo_mode}")
+    print(f"[REPORT_V2] Starting report: {company_name}, demo_mode={demo_mode}, date_from={date_from}, date_to={date_to}")
 
     db = None
     try:
@@ -1121,6 +1464,15 @@ def generate_report_task_v2(self, report_id: str, company_name: str, demo_mode: 
         r = get_redis()
         r.setex(f"original_name:{report_id}", 3600, company_name.lower().strip())
 
+        # Date parametrelerini Redis'e kaydet (Phase 2 için)
+        if date_from:
+            r.setex(f"date_from:{report_id}", 3600, date_from)
+        if date_to:
+            r.setex(f"date_to:{report_id}", 3600, date_to)
+
+        # Task ID'yi kaydet (iptal için)
+        register_task_id(r, report_id, self.request.id, "main")
+
         # Event: Job started
         estimated_duration = 600 if demo_mode else 3600
         publish_event(report_id, "job_started", {
@@ -1130,11 +1482,20 @@ def generate_report_task_v2(self, report_id: str, company_name: str, demo_mode: 
         })
 
         # TÜM AGENT'LAR PARALEL BAŞLASIN (Aşama 1)
+        # date_from/date_to parametreleri News ve İhale agent'larına iletilir
         run_tsg_agent_task.delay(report_id, company_name, demo_mode)
-        run_news_agent_task.delay(report_id, company_name, demo_mode, True, False)  # is_phase1=True
-        run_ihale_agent_task.delay(report_id, company_name, demo_mode, True, False)  # is_phase1=True
+        run_news_agent_task.delay(
+            report_id, company_name, demo_mode,
+            is_phase1=True, is_phase2=False,
+            date_from=date_from, date_to=date_to
+        )
+        run_ihale_agent_task.delay(
+            report_id, company_name, demo_mode,
+            is_phase1=True, is_phase2=False,
+            date_from=date_from, date_to=date_to
+        )
 
-        print(f"[REPORT_V2] All agents started in parallel for {report_id[:8]}")
+        print(f"[REPORT_V2] All agents started in parallel for {report_id[:8]}, date_range={date_from}-{date_to}")
 
         return {"status": "tsg_started", "report_id": report_id}
 

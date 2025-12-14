@@ -116,6 +116,8 @@ services:
 
   # ============================================
   # Celery Worker
+  # Pipeline Profile: light_16gb (default), standard_24gb, aggressive
+  # Concurrency: celery_app.py'den dinamik olarak ayarlanır
   # ============================================
   celery-worker:
     build:
@@ -123,7 +125,8 @@ services:
       dockerfile: docker/Dockerfile.backend
     container_name: kkb-celery-worker
     restart: unless-stopped
-    command: celery -A app.workers.celery_app worker -l info -c 4
+    # Concurrency celery_app.py'de profil bazlı ayarlanır (4/8/12)
+    command: celery -A app.workers.celery_app worker -l info
     environment:
       - DATABASE_URL=postgresql://kkb:hackathon2024@postgres:5432/firma_istihbarat
       - REDIS_URL=redis://redis:6379/0
@@ -131,6 +134,15 @@ services:
       - QDRANT_PORT=6333
       - KKB_API_URL=${KKB_API_URL}
       - KKB_API_KEY=${KKB_API_KEY}
+      # Pipeline profili (light_16gb, standard_24gb, aggressive)
+      - PIPELINE_PROFILE=${PIPELINE_PROFILE:-light_16gb}
+    deploy:
+      resources:
+        limits:
+          # 16GB sistemler için: 12GB memory limit
+          memory: 12G
+        reservations:
+          memory: 4G
     depends_on:
       postgres:
         condition: service_healthy

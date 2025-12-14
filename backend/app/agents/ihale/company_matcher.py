@@ -276,9 +276,13 @@ class IhaleCompanyMatcher:
 
     def _simple_match(self, name1: str, name2: str) -> bool:
         """
-        Basit firma adi eslestirmesi (LLM kullanmadan).
+        Multi-strategy firma adi eslestirmesi (LLM kullanmadan).
 
-        Tam eslestirme veya kismi eslestirme kontrolu yapar.
+        Strategies:
+        1. Exact normalized match -> True
+        2. Contains match -> True
+        3. Levenshtein ratio >= 70% -> True
+        4. Jaccard similarity >= 40% -> True (eskisi %60)
         """
         if not name1 or not name2:
             return False
@@ -287,15 +291,20 @@ class IhaleCompanyMatcher:
         n1 = self._normalize_company_name(name1)
         n2 = self._normalize_company_name(name2)
 
-        # Tam eslestirme
+        # Strategy 1: Tam eslestirme
         if n1 == n2:
             return True
 
-        # Biri digerini icerir
+        # Strategy 2: Biri digerini icerir
         if n1 in n2 or n2 in n1:
             return True
 
-        # Jaccard benzerlik (kelime kesisimi)
+        # Strategy 3: Levenshtein distance
+        levenshtein_ratio = self._levenshtein_ratio(n1, n2)
+        if levenshtein_ratio >= 0.7:  # %70 benzer
+            return True
+
+        # Strategy 4: Jaccard benzerlik (kelime kesisimi) - DÜŞÜRÜLMÜŞ THRESHOLD
         words1 = set(n1.split())
         words2 = set(n2.split())
 
@@ -307,7 +316,62 @@ class IhaleCompanyMatcher:
 
         similarity = len(intersection) / len(union)
 
-        return similarity >= 0.6  # %60 benzerlik esigi
+        return similarity >= 0.4  # %40 benzerlik esigi (eskisi %60)
+
+    def _levenshtein_ratio(self, s1: str, s2: str) -> float:
+        """
+        İki string arasındaki Levenshtein benzerlik oranı.
+
+        Returns: 0.0 - 1.0 arası benzerlik oranı
+        """
+        if not s1 or not s2:
+            return 0.0
+
+        if s1 == s2:
+            return 1.0
+
+        len1, len2 = len(s1), len(s2)
+        max_len = max(len1, len2)
+
+        if max_len == 0:
+            return 1.0
+
+        # Levenshtein distance hesapla
+        distance = self._levenshtein_distance(s1, s2)
+
+        # Benzerlik oranı = 1 - (distance / max_len)
+        return 1.0 - (distance / max_len)
+
+    def _levenshtein_distance(self, s1: str, s2: str) -> int:
+        """
+        İki string arasındaki Levenshtein (edit) mesafesi.
+
+        Dinamik programlama ile O(m*n) karmaşıklıkta hesaplar.
+        """
+        len1, len2 = len(s1), len(s2)
+
+        # Matris oluştur
+        dp = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+
+        # Base case
+        for i in range(len1 + 1):
+            dp[i][0] = i
+        for j in range(len2 + 1):
+            dp[0][j] = j
+
+        # Fill matrix
+        for i in range(1, len1 + 1):
+            for j in range(1, len2 + 1):
+                if s1[i - 1] == s2[j - 1]:
+                    dp[i][j] = dp[i - 1][j - 1]
+                else:
+                    dp[i][j] = 1 + min(
+                        dp[i - 1][j],      # silme
+                        dp[i][j - 1],      # ekleme
+                        dp[i - 1][j - 1]   # değiştirme
+                    )
+
+        return dp[len1][len2]
 
 
 # Test

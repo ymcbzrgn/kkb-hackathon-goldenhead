@@ -9,7 +9,7 @@ FALLBACK MEKANİZMASI:
 """
 import asyncio
 import os
-from typing import Callable, Dict, Optional, Any
+from typing import Callable, Dict, Optional, Any, List
 from datetime import datetime
 
 from app.agents.tsg.agent import TSGAgent
@@ -151,6 +151,50 @@ class Orchestrator:
         except Exception as e:
             print(f"WS callback error: {e}")
 
+    def _prepare_agent_summary(self, agent_id: str, result: AgentResult) -> Dict:
+        """
+        Agent sonuç özetini hazırla (RAM için sınırlı veri - 16GB MacBook için optimize).
+        Her agent için sadece önemli özet bilgileri döndürür.
+        """
+        if not result.data:
+            return {}
+
+        data = result.data
+
+        if agent_id == "tsg":
+            # TSG: Firma bilgileri özeti
+            tsg_sonuc = data.get("tsg_sonuc", {})
+            yapilandirilmis = tsg_sonuc.get("yapilandirilmis_veri", {})
+            return {
+                "firma_unvani": yapilandirilmis.get("Firma Unvani"),
+                "vergi_no": yapilandirilmis.get("Vergi No"),
+                "toplam_ilan": tsg_sonuc.get("toplam_ilan", 0),
+                "son_ilan_tarihi": tsg_sonuc.get("son_ilan_tarihi")
+            }
+
+        elif agent_id == "ihale":
+            # İhale: Yasak durumu özeti
+            return {
+                "yasak_durumu": data.get("yasak_durumu", False),
+                "risk_degerlendirmesi": data.get("risk_degerlendirmesi", "dusuk"),
+                "taranan_gun_sayisi": data.get("taranan_gun_sayisi", 0),
+                "bulunan_toplam_yasaklama": data.get("bulunan_toplam_yasaklama", 0)
+            }
+
+        elif agent_id == "news":
+            # News: Haber istatistikleri özeti
+            ozet = data.get("ozet", {})
+            return {
+                "toplam_haber": data.get("toplam_haber", ozet.get("toplam", 0)),
+                "olumlu": ozet.get("olumlu", 0),
+                "olumsuz": ozet.get("olumsuz", 0),
+                "sentiment_score": ozet.get("sentiment_score", 0),
+                "trend": ozet.get("trend", "notr"),
+                "kaynak_sayisi": len(data.get("kaynak_dagilimi", {}))
+            }
+
+        return {}
+
     async def _send_agent_progress(self, agent_id: str, progress: int, message: str):
         """Agent ilerleme bildir"""
         await self._send_event("agent_progress", {
@@ -221,27 +265,33 @@ class Orchestrator:
             print(f"[ORCHESTRATOR] İhale: LOCAL agent kullanılıyor (K8s devre dışı)")
             return await self.ihale_agent_local.execute(company_name)
 
-    async def _run_news_with_fallback(self, company_name: str) -> AgentResult:
+    async def _run_news_with_fallback(self, company_name: str, alternative_names: List[str] = None) -> AgentResult:
         """
         News Agent'ı fallback mekanizmasıyla çalıştır.
         K8s önce, fail olursa local.
+
+        Args:
+            company_name: Ana firma adı (kullanıcıdan gelen)
+            alternative_names: Alternatif isimler (TSG'den gelen resmi ünvan vb.)
         """
+        names_str = f"{company_name}" + (f" + {alternative_names}" if alternative_names else "")
         if self.news_agent_k8s:
-            print(f"[ORCHESTRATOR] News: K8s agent deneniyor...")
+            print(f"[ORCHESTRATOR] News: K8s agent deneniyor... ({names_str})")
             try:
-                result = await self.news_agent_k8s.execute(company_name)
+                # K8s agent'a da alternative_names geç (local ile tutarlı davranış)
+                result = await self.news_agent_k8s.run(company_name, alternative_names=alternative_names)
                 if self._should_fallback(result):
                     print(f"[ORCHESTRATOR] News: K8s sonuç yetersiz, LOCAL agent'a düşülüyor...")
                     print(f"[ORCHESTRATOR] News: K8s status={result.status}, duration={result.duration_seconds}s")
-                    return await self.news_agent_local.execute(company_name)
+                    return await self.news_agent_local.run(company_name, alternative_names=alternative_names)
                 print(f"[ORCHESTRATOR] News: K8s başarılı, süre={result.duration_seconds}s")
                 return result
             except Exception as e:
                 print(f"[ORCHESTRATOR] News: K8s HATA: {e}, LOCAL agent'a düşülüyor...")
-                return await self.news_agent_local.execute(company_name)
+                return await self.news_agent_local.run(company_name, alternative_names=alternative_names)
         else:
-            print(f"[ORCHESTRATOR] News: LOCAL agent kullanılıyor (K8s devre dışı)")
-            return await self.news_agent_local.execute(company_name)
+            print(f"[ORCHESTRATOR] News: LOCAL agent kullanılıyor (K8s devre dışı) - İsimler: {names_str}")
+            return await self.news_agent_local.run(company_name, alternative_names=alternative_names)
 
     async def _run_tsg_with_fallback(self, company_name: str) -> AgentResult:
         """
@@ -384,7 +434,15 @@ class Orchestrator:
         # resolved_company_name kullanılacak
         # ============================================
 
-        print(f"[ORCHESTRATOR] Diğer agentlar başlıyor - Kullanılacak firma adı: '{resolved_company_name}'")
+        # News agent için alternatif isimler hazırla
+        # Hem kullanıcının girdiği isim hem de TSG'den gelen resmi ünvan kullanılacak
+        news_alternative_names = []
+        if resolved_company_name != company_name:
+            news_alternative_names.append(resolved_company_name)
+
+        print(f"[ORCHESTRATOR] Diğer agentlar başlıyor")
+        print(f"[ORCHESTRATOR] - İhale Agent: '{resolved_company_name}'")
+        print(f"[ORCHESTRATOR] - News Agent: '{company_name}' + alternatifler: {news_alternative_names}")
 
         # İhale ve News agent başladı event'leri
         for agent_id, agent_name in [
@@ -406,9 +464,11 @@ class Orchestrator:
         agent_timeout = min(PARALLEL_TIMEOUT, remaining_time) if self.demo_mode else PARALLEL_TIMEOUT
         print(f"[ORCHESTRATOR] Agent timeout: {agent_timeout:.0f}s (elapsed: {elapsed_since_start:.0f}s, remaining: {remaining_time:.0f}s)")
 
-        # Task'ları oluştur - resolved_company_name ile
+        # Task'ları oluştur
+        # İhale: resolved_company_name (TSG'den gelen resmi ünvan)
+        # News: company_name (kullanıcı input) + resolved_company_name (TSG alternatif)
         ihale_task = asyncio.create_task(self._run_ihale_with_fallback(resolved_company_name))
-        news_task = asyncio.create_task(self._run_news_with_fallback(resolved_company_name))
+        news_task = asyncio.create_task(self._run_news_with_fallback(company_name, alternative_names=news_alternative_names))
         other_tasks = [ihale_task, news_task]
 
         # Timeout ile bekle
@@ -457,13 +517,15 @@ class Orchestrator:
                 })
             else:
                 agent_results[agent_id] = result
+                # Agent sonuç özetini hazırla (RAM için sınırlı veri)
+                agent_summary_data = self._prepare_agent_summary(agent_id, result)
                 await self._send_event("agent_completed", {
                     "agent_id": f"{agent_id}_agent",
                     "duration_seconds": result.duration_seconds,
-                    "summary": {
-                        "key_findings": result.key_findings,
-                        "warning_flags": result.warning_flags
-                    }
+                    "summary": result.summary,
+                    "key_findings": result.key_findings,
+                    "warning_flags": result.warning_flags,
+                    "data": agent_summary_data  # Anlık veri gösterimi için
                 })
 
         # ============================================
