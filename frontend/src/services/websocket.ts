@@ -11,6 +11,11 @@ import { createMockWebSocket, MockWebSocket } from '@/mocks/mockWebSocket';
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
+// Reconnection config
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 2000; // 2 saniye
+const RECONNECT_DELAY_MAX_MS = 30000; // Max 30 saniye
+
 // ==================== Types ====================
 
 export interface WebSocketCallbacks {
@@ -34,39 +39,90 @@ function createRealWebSocket(
   const url = `${WS_BASE_URL}/ws/${reportId}`;
   let ws: WebSocket | null = null;
   let isConnected = false;
+  let reconnectAttempts = 0;
+  let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isManualClose = false; // Kullanıcı tarafından kapatıldı mı?
 
-  try {
-    ws = new WebSocket(url);
-
-    ws.onopen = () => {
-      isConnected = true;
-      callbacks.onOpen?.();
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data) as WebSocketEvent;
-        callbacks.onEvent(data);
-      } catch (err) {
-        console.error('WebSocket message parse error:', err);
+  const connect = () => {
+    // Eski bağlantıyı temizle (connection leak önleme)
+    if (ws) {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
       }
-    };
+      ws = null;
+    }
 
-    ws.onerror = () => {
-      callbacks.onError?.('WebSocket bağlantı hatası');
-    };
+    try {
+      ws = new WebSocket(url);
 
-    ws.onclose = () => {
-      isConnected = false;
-      callbacks.onClose?.();
-    };
-  } catch (err) {
-    callbacks.onError?.(err instanceof Error ? err.message : 'WebSocket hatası');
-  }
+      ws.onopen = () => {
+        isConnected = true;
+        reconnectAttempts = 0; // Başarılı bağlantıda sıfırla
+        callbacks.onOpen?.();
+        console.log(`[WS] Connected to ${reportId}`);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as WebSocketEvent;
+          callbacks.onEvent(data);
+        } catch (err) {
+          console.error('WebSocket message parse error:', err);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('[WS] Error:', error);
+        callbacks.onError?.('WebSocket bağlantı hatası');
+      };
+
+      ws.onclose = (event) => {
+        isConnected = false;
+        console.log(`[WS] Disconnected: code=${event.code}, reason=${event.reason}`);
+
+        // Manuel kapatma değilse ve max deneme aşılmadıysa yeniden bağlan
+        if (!isManualClose && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          const delay = Math.min(
+            RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts), // Exponential backoff
+            RECONNECT_DELAY_MAX_MS
+          );
+          reconnectAttempts++;
+          console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+
+          reconnectTimeout = setTimeout(() => {
+            connect();
+          }, delay);
+        } else {
+          callbacks.onClose?.();
+          if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            callbacks.onError?.('Bağlantı kurulamadı, lütfen sayfayı yenileyin');
+          }
+        }
+      };
+    } catch (err) {
+      callbacks.onError?.(err instanceof Error ? err.message : 'WebSocket hatası');
+    }
+  };
+
+  // İlk bağlantıyı başlat
+  connect();
 
   return {
     close: () => {
+      isManualClose = true; // Reconnect'i engelle
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
       if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
         ws.close();
         ws = null;
         isConnected = false;

@@ -2,11 +2,14 @@
 WebSocket Handler
 Real-time rapor takibi için WebSocket endpoint
 """
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, Set
 import json
 import asyncio
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -57,19 +60,34 @@ class ConnectionManager:
             self.active_connections[report_id].discard(connection)
 
     async def broadcast_to_all(self, event_type: str, payload: dict):
-        """Tüm bağlantılara broadcast"""
+        """Tüm bağlantılara broadcast (dead connection temizleme ile)"""
         event = {
             "type": event_type,
             "timestamp": datetime.utcnow().isoformat() + "Z",
             "payload": payload
         }
 
-        for connections in self.active_connections.values():
+        # Her report için dead connection'ları takip et
+        all_dead_connections: dict[str, set] = {}
+
+        for report_id, connections in self.active_connections.items():
+            dead_connections = set()
             for connection in connections:
                 try:
                     await connection.send_json(event)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Broadcast error for report {report_id}: {e}")
+                    dead_connections.add(connection)
+            if dead_connections:
+                all_dead_connections[report_id] = dead_connections
+
+        # Dead connection'ları temizle
+        for report_id, dead_conns in all_dead_connections.items():
+            if report_id in self.active_connections:
+                for conn in dead_conns:
+                    self.active_connections[report_id].discard(conn)
+                if not self.active_connections[report_id]:
+                    del self.active_connections[report_id]
 
 
 # Global connection manager
@@ -185,11 +203,11 @@ async def _send_current_state(websocket: WebSocket, report_id: str):
     from app.core.database import SessionLocal
     from app.services.report_service import ReportService
 
+    db = None
     try:
         db = SessionLocal()
         service = ReportService(db)
         state = service.get_live_state(report_id)
-        db.close()
 
         if not state:
             return
@@ -236,4 +254,7 @@ async def _send_current_state(websocket: WebSocket, report_id: str):
                 })
 
     except Exception as e:
-        print(f"State restore error: {e}")
+        logger.error(f"State restore error for report {report_id}: {e}")
+    finally:
+        if db:
+            db.close()

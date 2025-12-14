@@ -48,6 +48,7 @@ class BaseNewsScraper(ABC):
     
     def __init__(self):
         self.browser: Optional[Browser] = None
+        self.context = None  # Browser context - kapatılması gerekiyor
         self.page: Optional[Page] = None
         self._playwright = None
         self.name = self.NAME or self.__class__.__name__
@@ -68,12 +69,12 @@ class BaseNewsScraper(ABC):
                 headless=True,
                 args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
             )
-            context = await self.browser.new_context(
+            self.context = await self.browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
                 user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
                 locale='tr-TR'
             )
-            self.page = await context.new_page()
+            self.page = await self.context.new_page()
             self.page.set_default_timeout(self.PAGE_TIMEOUT)
             success(f"Browser baslatildi ({self.name})")
         except Exception as e:
@@ -84,10 +85,16 @@ class BaseNewsScraper(ABC):
         try:
             if self.page:
                 await self.page.close()
+                self.page = None
+            if self.context:
+                await self.context.close()
+                self.context = None
             if self.browser:
                 await self.browser.close()
+                self.browser = None
             if self._playwright:
                 await self._playwright.stop()
+                self._playwright = None
         except Exception as e:
             error(f"Browser kapatma hatasi: {e}")
     

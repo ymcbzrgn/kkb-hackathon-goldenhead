@@ -80,7 +80,7 @@ class Report(Base):
     external_notes = Column(Text)
 
     # Metadata (esnek alan)
-    meta_data = Column("metadata", JSONB, default={})
+    meta_data = Column("metadata", JSONB, default=dict)  # Mutable default fix
 
     # Reserved Kolonlar
     reserved_text_1 = Column(Text)

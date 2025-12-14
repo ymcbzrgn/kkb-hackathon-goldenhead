@@ -39,16 +39,48 @@ class ReportService:
         self,
         page: int = 1,
         limit: int = 10,
-        status: Optional[str] = None
+        status: Optional[str] = None,
+        sort: str = "-created_at"
     ) -> tuple[List[Report], int]:
-        """Raporları listele"""
+        """
+        Raporları listele.
+
+        Args:
+            page: Sayfa numarası
+            limit: Sayfa başı kayıt sayısı
+            status: Filtre (pending, processing, completed, failed)
+            sort: Sıralama (-created_at, created_at, -company_name, company_name)
+        """
         query = self.db.query(Report).filter(Report.deleted_at.is_(None))
 
         if status:
             query = query.filter(Report.status == status)
 
         total = query.count()
-        reports = query.order_by(Report.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+        # Sort parametresini işle
+        if sort.startswith("-"):
+            sort_field = sort[1:]
+            descending = True
+        else:
+            sort_field = sort
+            descending = False
+
+        # Sort alanını belirle
+        if sort_field == "created_at":
+            order_column = Report.created_at
+        elif sort_field == "company_name":
+            order_column = Report.company_name
+        else:
+            order_column = Report.created_at  # Fallback
+            descending = True
+
+        if descending:
+            query = query.order_by(order_column.desc())
+        else:
+            query = query.order_by(order_column.asc())
+
+        reports = query.offset((page - 1) * limit).limit(limit).all()
 
         return reports, total
 

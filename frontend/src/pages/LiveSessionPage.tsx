@@ -22,18 +22,26 @@ export function LiveSessionPage() {
   // Store state - shallow compare ile
   const agents = useAgentStore((s) => s.agents);
   const initializeFromApi = useAgentStore((s) => s.initializeFromApi);
+  const resetAgents = useAgentStore((s) => s.reset);
   const livePhase = useReportStore((s) => s.livePhase);
   const wsError = useReportStore((s) => s.wsError);
 
   // Store actions
   const setLivePhase = useReportStore((s) => s.setLivePhase);
 
+  // Rapor ID değiştiğinde agent store'u resetle (eski değerler kalmasın)
+  useEffect(() => {
+    resetAgents();
+  }, [id, resetAgents]);
+
   // Rapor yüklendiğinde agent progress'lerini API'den al
+  // JSON.stringify ile deep comparison - her değişiklikte güncelle
+  const agentProgressesJson = JSON.stringify(report?.agent_progresses || {});
   useEffect(() => {
     if (report?.agent_progresses) {
       initializeFromApi(report.agent_progresses);
     }
-  }, [report?.agent_progresses, initializeFromApi]);
+  }, [agentProgressesJson, initializeFromApi]);
 
   // Rapor durumuna göre phase'i başlat (sayfa yenilendiğinde)
   useEffect(() => {
@@ -182,19 +190,36 @@ export function LiveSessionPage() {
 
         {/* Phase Indicator */}
         {(() => {
-          // Phase'i belirle - önce report.status'a bak, sonra livePhase'e
-          const currentPhase = report.status === 'completed' ? 'completed'
-            : report.status === 'failed' ? 'failed'
-            : report.council_decision ? 'council'
-            : phase;
+          // API'den gelen agent progress'lerini doğrudan kullan (store'a güvenme - eski değerler kalabilir)
+          const apiProgress = report.agent_progresses || {};
+          const tsgProgress = apiProgress.tsg_agent?.progress ?? 0;
+          const ihaleProgress = apiProgress.ihale_agent?.progress ?? 0;
+          const newsProgress = apiProgress.news_agent?.progress ?? 0;
 
-          // Veri toplama: aktif (phase=agents), tamamlandı (council veya completed aşamasındayız)
+          // Agent'ların tamamlanma durumunu kontrol et (hepsi %100 mü?)
+          const allAgentsCompleted = tsgProgress >= 100 && ihaleProgress >= 100 && newsProgress >= 100;
+
+          // Phase'i belirle - agent'ların durumuna göre
+          let currentPhase: string;
+          if (report.status === 'completed') {
+            currentPhase = 'completed';
+          } else if (report.status === 'failed') {
+            currentPhase = 'failed';
+          } else if (allAgentsCompleted) {
+            // Tüm agent'lar bitti - council aşaması
+            currentPhase = 'council';
+          } else {
+            // Agent'lar hala çalışıyor
+            currentPhase = 'agents';
+          }
+
+          // Veri toplama: aktif (agents), tamamlandı (hepsi %100)
           const isDataCollectionActive = currentPhase === 'agents';
-          const isDataCollectionDone = currentPhase === 'council' || currentPhase === 'completed';
+          const isDataCollectionDone = allAgentsCompleted;
 
-          // Komite: aktif (phase=council), tamamlandı (completed aşamasındayız)
-          const isCouncilActive = currentPhase === 'council';
-          const isCouncilDone = currentPhase === 'completed';
+          // Komite: aktif (council aşamasında), tamamlandı (completed)
+          const isCouncilActive = currentPhase === 'council' && report.status !== 'completed';
+          const isCouncilDone = report.status === 'completed';
 
           return (
             <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">

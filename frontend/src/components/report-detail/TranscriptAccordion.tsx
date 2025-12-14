@@ -3,12 +3,28 @@
  * Komite toplantısı transcript'i accordion yapısında
  */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, MessageSquare, Clock } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import type { TranscriptEntry, CouncilPhase, CouncilMemberId } from '@/types';
 import { formatShortDate } from '@/utils/formatters';
+
+// Hook to track image load failures (React pattern instead of DOM manipulation)
+function useImageFallback() {
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set());
+
+  const handleImageError = useCallback((speakerId: string) => {
+    setFailedImages((prev) => new Set(prev).add(speakerId));
+  }, []);
+
+  const hasImageFailed = useCallback(
+    (speakerId: string) => failedImages.has(speakerId),
+    [failedImages]
+  );
+
+  return { handleImageError, hasImageFailed };
+}
 
 interface TranscriptAccordionProps {
   transcript: TranscriptEntry[];
@@ -69,33 +85,38 @@ function groupByPhase(transcript: TranscriptEntry[]) {
   return groups;
 }
 
-function TranscriptEntryItem({ entry }: { entry: TranscriptEntry }) {
+function TranscriptEntryItem({
+  entry,
+  hasImageFailed,
+  onImageError,
+}: {
+  entry: TranscriptEntry;
+  hasImageFailed: (speakerId: string) => boolean;
+  onImageError: (speakerId: string) => void;
+}) {
   const photoUrl = councilPhotos[entry.speaker_id as CouncilMemberId];
-  
+  const showFallback = !photoUrl || hasImageFailed(entry.speaker_id);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex gap-4 py-4 border-b last:border-0"
     >
-      {/* Avatar with Photo */}
+      {/* Avatar with Photo - React state-based fallback (no DOM manipulation) */}
       <div className="flex-shrink-0">
-        {photoUrl ? (
+        {photoUrl && !showFallback ? (
           <img
             src={photoUrl}
             alt={entry.speaker_name}
             className="w-10 h-10 rounded-full object-cover border-2 border-kkb-200 shadow-sm"
-            onError={(e) => {
-              // Fallback to emoji if image fails
-              const target = e.target as HTMLImageElement;
-              target.style.display = 'none';
-              target.nextElementSibling?.classList.remove('hidden');
-            }}
+            onError={() => onImageError(entry.speaker_id)}
           />
-        ) : null}
-        <div className={`w-10 h-10 rounded-full bg-kkb-100 flex items-center justify-center text-xl ${photoUrl ? 'hidden' : ''}`}>
-          {entry.speaker_emoji}
-        </div>
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-kkb-100 flex items-center justify-center text-xl">
+            {entry.speaker_emoji}
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -122,12 +143,16 @@ function PhaseSection({
   phase,
   entries,
   isOpen,
-  onToggle
+  onToggle,
+  hasImageFailed,
+  onImageError,
 }: {
   phase: CouncilPhase;
   entries: TranscriptEntry[];
   isOpen: boolean;
   onToggle: () => void;
+  hasImageFailed: (speakerId: string) => boolean;
+  onImageError: (speakerId: string) => void;
 }) {
   // Bilinmeyen phase için default renk kullan
   const colors = phaseColors[phase] || defaultPhaseColor;
@@ -167,7 +192,12 @@ function PhaseSection({
           >
             <div className="px-4 bg-white">
               {entries.map((entry, index) => (
-                <TranscriptEntryItem key={index} entry={entry} />
+                <TranscriptEntryItem
+                  key={index}
+                  entry={entry}
+                  hasImageFailed={hasImageFailed}
+                  onImageError={onImageError}
+                />
               ))}
             </div>
           </motion.div>
@@ -182,6 +212,9 @@ export function TranscriptAccordion({ transcript }: TranscriptAccordionProps) {
   const [openPhases, setOpenPhases] = useState<Set<CouncilPhase>>(
     new Set(['decision']) // Default: only decision phase open
   );
+
+  // React state-based image fallback handler (replaces DOM manipulation)
+  const { handleImageError, hasImageFailed } = useImageFallback();
 
   const togglePhase = (phase: CouncilPhase) => {
     setOpenPhases((prev) => {
@@ -219,6 +252,8 @@ export function TranscriptAccordion({ transcript }: TranscriptAccordionProps) {
             entries={group.entries}
             isOpen={openPhases.has(group.phase)}
             onToggle={() => togglePhase(group.phase)}
+            hasImageFailed={hasImageFailed}
+            onImageError={handleImageError}
           />
         ))}
       </div>

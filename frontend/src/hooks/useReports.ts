@@ -5,7 +5,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getReports } from '@/services/api';
-import type { ReportsQueryParams } from '@/types';
+import type { ApiResponse, PaginatedResponse, ReportListItem, ReportsQueryParams } from '@/types';
 
 export function useReports(params?: ReportsQueryParams) {
   return useQuery({
@@ -16,8 +16,8 @@ export function useReports(params?: ReportsQueryParams) {
     refetchOnWindowFocus: 'always',
     refetchInterval: (query) => {
       // Processing rapor varsa 10 saniyede bir yenile
-      const items = query.state.data?.data?.items || [];
-      const hasProcessing = items.some((r: { status: string }) => r.status === 'processing');
+      const items = (query.state.data as ApiResponse<PaginatedResponse<ReportListItem>> | undefined)?.data?.items ?? [];
+      const hasProcessing = items.some((r) => r.status === 'processing');
       return hasProcessing ? 10000 : false;
     },
     select: (response) => {

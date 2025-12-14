@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 from uuid import UUID
+from enum import Enum
 
 from app.core.database import get_db
 from app.services.report_service import ReportService
@@ -85,12 +86,18 @@ async def create_report(
     }
 
 
+# Valid status values for filtering
+VALID_STATUSES = {"pending", "processing", "completed", "failed"}
+# Valid sort options
+VALID_SORT_OPTIONS = {"created_at", "-created_at", "company_name", "-company_name"}
+
+
 @router.get("")
 async def list_reports(
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=50),
-    status: Optional[str] = None,
-    sort: str = "-created_at",
+    report_status: Optional[str] = Query(None, alias="status"),
+    sort: str = Query("-created_at"),
     db: Session = Depends(get_db)
 ):
     """
@@ -100,13 +107,42 @@ async def list_reports(
     - page: Sayfa numarası (default: 1)
     - limit: Sayfa başı kayıt (default: 10, max: 50)
     - status: Filtre (pending, processing, completed, failed)
-    - sort: Sıralama (created_at, -created_at, company_name)
+    - sort: Sıralama (created_at, -created_at, company_name, -company_name)
     """
+    # Status validation
+    if report_status and report_status not in VALID_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "INVALID_STATUS",
+                    "message": f"Geçersiz status değeri. Geçerli değerler: {', '.join(VALID_STATUSES)}"
+                }
+            }
+        )
+
+    # Sort validation
+    if sort not in VALID_SORT_OPTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "INVALID_SORT",
+                    "message": f"Geçersiz sort değeri. Geçerli değerler: {', '.join(VALID_SORT_OPTIONS)}"
+                }
+            }
+        )
+
     report_service = ReportService(db)
     reports, total = report_service.list(
         page=page,
         limit=limit,
-        status=status
+        status=report_status,
+        sort=sort  # Sort parametresini service'e geçir
     )
 
     total_pages = (total + limit - 1) // limit
@@ -157,14 +193,17 @@ async def get_report(
     report = report_service.get_by_id(report_uuid)
 
     if not report:
-        return {
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "REPORT_NOT_FOUND",
-                "message": "Rapor bulunamadı"
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "REPORT_NOT_FOUND",
+                    "message": "Rapor bulunamadı"
+                }
             }
-        }
+        )
 
     # Rapor detayı dönüş
     report_data = report.to_dict()
@@ -292,14 +331,17 @@ async def delete_report(
         deleted = report_service.delete(report_uuid)
 
         if not deleted:
-            return {
-                "success": False,
-                "data": None,
-                "error": {
-                    "code": "REPORT_NOT_FOUND",
-                    "message": "Rapor bulunamadı"
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "success": False,
+                    "data": None,
+                    "error": {
+                        "code": "REPORT_NOT_FOUND",
+                        "message": "Rapor bulunamadı"
+                    }
                 }
-            }
+            )
 
         return {
             "success": True,
@@ -457,18 +499,32 @@ async def export_pdf(
             "transcript": report.council_decision.transcript
         }
 
-    # 7. PDF oluştur
-    pdf_service = PDFExportService()
-    pdf_buffer = pdf_service.generate_report_pdf(report_data)
+    # 7. PDF oluştur (exception handling ile)
+    try:
+        pdf_service = PDFExportService()
+        pdf_buffer = pdf_service.generate_report_pdf(report_data)
 
-    # 8. Dosya adı oluştur
-    filename = pdf_service.generate_filename(report.company_name)
+        # 8. Dosya adı oluştur
+        filename = pdf_service.generate_filename(report.company_name)
 
-    # 9. PDF'i döndür
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
-    )
+        # 9. PDF'i döndür
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    except Exception as e:
+        print(f"[PDF_EXPORT] Error generating PDF for report {report_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "success": False,
+                "data": None,
+                "error": {
+                    "code": "PDF_GENERATION_FAILED",
+                    "message": "PDF oluşturulurken bir hata oluştu. Lütfen daha sonra tekrar deneyin."
+                }
+            }
+        )

@@ -2,7 +2,9 @@
 Application Configuration
 Environment variables ve settings yönetimi
 """
+import secrets
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from typing import Optional
 
 
@@ -33,12 +35,27 @@ class Settings(BaseSettings):
     # Demo Mode - 10 dakikalık kısaltılmış pipeline
     DEMO_MODE: bool = False
 
-    # CORS
-    ALLOWED_ORIGINS: list[str] = ["*"]
+    # CORS - Production'da spesifik origin'ler belirtilmeli
+    # Env'de virgülle ayrılmış: ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
 
-    # JWT (ileride kullanılabilir)
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    # JWT - SECRET_KEY mutlaka .env'den okunmalı, yoksa her restart'ta yeni key
+    SECRET_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    @field_validator('SECRET_KEY', mode='before')
+    @classmethod
+    def generate_secret_key_if_empty(cls, v: str) -> str:
+        """SECRET_KEY boşsa güvenli random key üret ve uyarı ver."""
+        if not v or v == "your-secret-key-change-in-production":
+            import warnings
+            warnings.warn(
+                "SECRET_KEY is not set! Generating random key. "
+                "Set SECRET_KEY in .env for production!",
+                UserWarning
+            )
+            return secrets.token_urlsafe(32)
+        return v
 
     class Config:
         env_file = ".env"

@@ -704,8 +704,16 @@ class PDFExportService:
 
             yk_rows = [["Ad Soyad", "Gorev"]]
             for uye in yonetim:
-                ad = self._sanitize_text(uye.get('ad', '-'))
-                gorev = self._sanitize_text(uye.get('gorev', '-'))
+                # Handle both string and dict formats
+                if isinstance(uye, str):
+                    ad = self._sanitize_text(uye)
+                    gorev = "-"
+                elif isinstance(uye, dict):
+                    ad = self._sanitize_text(uye.get('ad', '-'))
+                    gorev = self._sanitize_text(uye.get('gorev', '-'))
+                else:
+                    ad = self._sanitize_text(str(uye))
+                    gorev = "-"
                 yk_rows.append([ad, gorev])
 
             yk_table = Table(yk_rows, colWidths=[10*cm, 5*cm])

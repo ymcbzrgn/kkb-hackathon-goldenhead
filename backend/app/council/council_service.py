@@ -66,6 +66,43 @@ class CouncilService:
 
         print(f"[COUNCIL] Report {report_id}: Demo Mode = {self.demo_mode}, Speech Timeout = {self.speech_timeout}s")
 
+    @staticmethod
+    def _sanitize_input(text: str) -> str:
+        """
+        Prompt injection koruması - kullanıcı girdilerini temizle.
+        LLM prompt'larına gönderilecek metinleri sanitize eder.
+        """
+        if not text:
+            return ""
+
+        # Tehlikeli karakterleri ve pattern'leri temizle
+        sanitized = text
+
+        # Prompt injection pattern'leri
+        dangerous_patterns = [
+            "```",           # Kod blokları
+            "###",           # Markdown başlıklar (prompt bölümleri gibi görünebilir)
+            "SYSTEM:",       # Sistem prompt enjeksiyonu
+            "USER:",         # Kullanıcı prompt enjeksiyonu
+            "ASSISTANT:",    # Asistan prompt enjeksiyonu
+            "Ignore previous",  # Prompt override denemeleri
+            "Disregard",
+            "Forget everything",
+        ]
+
+        for pattern in dangerous_patterns:
+            sanitized = sanitized.replace(pattern, "")
+
+        # Maksimum uzunluk sınırla (çok uzun girdiler prompt'u bozabilir)
+        max_length = 500
+        if len(sanitized) > max_length:
+            sanitized = sanitized[:max_length] + "..."
+
+        # Ekstra boşlukları temizle
+        sanitized = " ".join(sanitized.split())
+
+        return sanitized.strip()
+
     async def _stream_speech_with_pacing(self, member_id: str, llm_stream) -> str:
         """
         Konusmayi insan okuma hizinda stream et.
@@ -79,16 +116,21 @@ class CouncilService:
             )
         except asyncio.TimeoutError:
             print(f"[COUNCIL] Speech timeout ({self.speech_timeout}s) for {member_id}")
+            # Async generator'ı düzgün kapat (memory leak önleme)
+            try:
+                await llm_stream.aclose()
+            except Exception as close_err:
+                print(f"[COUNCIL] Error closing llm_stream: {close_err}")
             return f"[Konuşma {self.speech_timeout} saniye içinde tamamlanamadı]"
 
     async def _stream_speech_internal(self, member_id: str, llm_stream) -> str:
         """Internal streaming - timeout wrapper tarafından çağrılır."""
-        full_response = ""
+        response_chunks: list[str] = []  # Use list for O(1) append, join at end
         buffer = ""
         last_emit_time = asyncio.get_event_loop().time()
 
         async for chunk in llm_stream:
-            full_response += chunk
+            response_chunks.append(chunk)
             buffer += chunk
 
             now = asyncio.get_event_loop().time()
@@ -114,7 +156,7 @@ class CouncilService:
                 "is_complete": False
             })
 
-        return full_response
+        return "".join(response_chunks)
 
     def _publish_event(self, event_type: str, payload: dict):
         """Redis Pub/Sub üzerinden event gönder"""
@@ -297,9 +339,10 @@ class CouncilService:
             "speaker_emoji": moderator.emoji
         })
 
-        # Moderatör açılış prompt'u
+        # Moderatör açılış prompt'u (company_name sanitize edildi - prompt injection koruması)
+        safe_company_name = self._sanitize_input(company_name)
         opening_prompt = f"""
-Bugün {company_name} firmasını değerlendireceğiz.
+Bugün {safe_company_name} firmasını değerlendireceğiz.
 
 {intel_summary}
 
@@ -357,8 +400,9 @@ Lütfen toplantıyı açın (2-3 cümle). Firma hakkında kısa bir ön bilgi ve
             })
 
             # Değerlendirme prompt'u (2 dk toplantı için optimize)
+            # company_name sanitize edildi - prompt injection koruması
             member_prompt = f"""
-{company_name} firmasını uzmanlık alanınız ({member.role}) açısından değerlendirin.
+{safe_company_name} firmasını uzmanlık alanınız ({member.role}) açısından değerlendirin.
 
 === VERİLER ===
 {formatted_data}
@@ -440,9 +484,9 @@ SKOR FORMATI: [SKOR: XX]
         decision = self._determine_decision(final_score, context)
         consensus = self._calculate_consensus(scores)
 
-        # Moderatör final özet
+        # Moderatör final özet (company_name sanitize edildi)
         final_prompt = f"""
-{company_name} değerlendirmesi tamamlandı.
+{safe_company_name} değerlendirmesi tamamlandı.
 
 Üye skorları: {scores}
 Ağırlıklı final skor: {final_score}
@@ -785,7 +829,8 @@ Risk Faktorleri:
         })
 
         system_prompt = get_system_prompt(speaker_id)
-        company_name = context["company_name"]
+        # company_name sanitize edildi - prompt injection koruması
+        company_name = self._sanitize_input(context["company_name"])
         user_prompt = f"""
 {company_name} firması için tartışma aşamasındasınız. {target.name} ({target.role}) sizden farklı düşünüyor.
 
@@ -857,9 +902,9 @@ Kısa ve öz bir şekilde (2-3 cümle) görüşünüzü savunun veya uzlaşma ar
         # Konsensüs hesapla
         consensus = self._calculate_consensus(scores)
 
-        # Moderatör özeti
+        # Moderatör özeti (company_name sanitize edildi - prompt injection koruması)
         system_prompt = get_system_prompt("moderator")
-        company_name = context["company_name"]
+        company_name = self._sanitize_input(context["company_name"])
         user_prompt = f"""
 {company_name} firmasının değerlendirmesini özetleyin ve kararı açıklayın.
 
@@ -916,7 +961,8 @@ Kısa bir özet yapın (3-4 cümle).
 
     def _build_user_prompt(self, phase: Dict, context: Dict, scores: Dict) -> str:
         """User prompt oluştur - formatlanmış verilerle"""
-        company_name = context["company_name"]
+        # company_name sanitize edildi - prompt injection koruması
+        company_name = self._sanitize_input(context["company_name"])
         formatted_data = self._format_agent_data(context)
         intel_summary = self._format_intelligence_summary(context.get("intelligence_report"))
 

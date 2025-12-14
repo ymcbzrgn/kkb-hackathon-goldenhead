@@ -2,11 +2,14 @@
 LLM Client
 KKB Kloudeks API wrapper
 """
+import logging
 import httpx
 import json
 from typing import AsyncGenerator, List, Dict, Optional, Any
 from app.core.config import settings
 from app.llm.models import AVAILABLE_MODELS, ModelConfig
+
+logger = logging.getLogger(__name__)
 
 
 class LLMClient:
@@ -104,19 +107,30 @@ class LLMClient:
                 }
             ) as response:
                 response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        if data_str == "[DONE]":
-                            break
-                        try:
-                            data = json.loads(data_str)
-                            delta = data.get("choices", [{}])[0].get("delta", {})
-                            content = delta.get("content", "")
-                            if content:
-                                yield content
-                        except json.JSONDecodeError:
-                            continue
+                try:
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data = json.loads(data_str)
+                                # Check for API errors in stream
+                                if "error" in data:
+                                    logger.error(f"LLM API error in stream: {data['error']}")
+                                    break
+                                delta = data.get("choices", [{}])[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
+                except httpx.ReadError as e:
+                    logger.error(f"Network read error during LLM stream: {e}")
+                    raise
+                except httpx.RemoteProtocolError as e:
+                    logger.error(f"Remote protocol error during LLM stream: {e}")
+                    raise
 
     async def vision(
         self,

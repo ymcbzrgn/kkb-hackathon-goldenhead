@@ -44,8 +44,8 @@ class AgentResult(Base):
 
     # Özet
     summary = Column(Text)
-    key_findings = Column(JSONB, default=[])
-    warning_flags = Column(JSONB, default=[])
+    key_findings = Column(JSONB, default=list)  # Mutable default fix
+    warning_flags = Column(JSONB, default=list)  # Mutable default fix
 
     # Performans
     started_at = Column(DateTime(timezone=True))
@@ -86,7 +86,7 @@ class CouncilDecision(Base):
     consensus = Column(Float)  # 0.00 - 1.00 (numeric in DB)
 
     # Karar Detayları
-    conditions = Column(JSONB, default=[])
+    conditions = Column(JSONB, default=list)  # Mutable default fix
     summary = Column(Text)  # DB'de var
 
     # Bireysel Skorlar

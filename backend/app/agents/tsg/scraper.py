@@ -38,6 +38,7 @@ class TSGScraper:
 
     def __init__(self):
         self.browser: Optional[Browser] = None
+        self.context = None  # Browser context - kapatılması gerekiyor
         self.page: Optional[Page] = None
         self.playwright = None
         self.logged_in = False
@@ -69,8 +70,8 @@ class TSGScraper:
                 ]
             )
 
-            # Context olustur
-            context = await self.browser.new_context(
+            # Context olustur ve sakla (kapatmak için)
+            self.context = await self.browser.new_context(
                 viewport={"width": 1920, "height": 1080},
                 locale="tr-TR",
                 user_agent=(
@@ -79,7 +80,7 @@ class TSGScraper:
                 )
             )
 
-            self.page = await context.new_page()
+            self.page = await self.context.new_page()
             self.page.set_default_timeout(30000)
 
             success("Browser baslatildi")
@@ -1320,19 +1321,24 @@ class TSGScraper:
         return None
 
     async def _close_browser(self):
-        """Browser'i kapat"""
+        """Browser'i kapat (context dahil - memory leak önleme)"""
         log("Browser kapatiliyor...")
         try:
+            if self.page:
+                await self.page.close()
+            if self.context:
+                await self.context.close()
             if self.browser:
                 await self.browser.close()
             if self.playwright:
                 await self.playwright.stop()
             success("Browser kapatildi")
-        except:
-            pass
+        except Exception as e:
+            warn(f"Browser kapatma hatası: {e}")
 
-        self.browser = None
         self.page = None
+        self.context = None
+        self.browser = None
         self.playwright = None
 
 

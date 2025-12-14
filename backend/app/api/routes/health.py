@@ -2,6 +2,7 @@
 Health Check Endpoint
 Sistem durumu kontrolü
 """
+import logging
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -9,6 +10,8 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -35,6 +38,7 @@ async def health_check(db: Session = Depends(get_db)):
         db.execute(text("SELECT 1"))
         health_status["services"]["database"] = "up"
     except Exception as e:
+        logger.warning(f"Database health check failed: {e}")
         health_status["services"]["database"] = "down"
         health_status["status"] = "degraded"
 
@@ -45,6 +49,7 @@ async def health_check(db: Session = Depends(get_db)):
         r.ping()
         health_status["services"]["redis"] = "up"
     except Exception as e:
+        logger.warning(f"Redis health check failed: {e}")
         health_status["services"]["redis"] = "down"
         health_status["status"] = "degraded"
 
@@ -57,6 +62,7 @@ async def health_check(db: Session = Depends(get_db)):
         else:
             health_status["services"]["celery"] = "down"
     except Exception as e:
+        logger.warning(f"Celery health check failed: {e}")
         health_status["services"]["celery"] = "down"
 
     return {
