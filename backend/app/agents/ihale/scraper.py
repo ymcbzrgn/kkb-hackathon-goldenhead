@@ -371,10 +371,10 @@ class ResmiGazeteScraper:
 
     async def _quick_pdf_read(self, pdf_path: str) -> str:
         """
-        PDF'den hizli text cikart (yasaklama kontrolu icin).
+        PDF'den text cikart (yasaklama kontrolu icin).
 
-        PyMuPDF ile text extraction - OCR yapilmaz.
-        Detayli OCR, pdf_reader.py tarafindan yapilacak.
+        Önce PyMuPDF ile text extraction dener.
+        Bos gelirse Tesseract OCR ile tarar.
         """
         try:
             import fitz  # PyMuPDF
@@ -382,8 +382,34 @@ class ResmiGazeteScraper:
             doc = fitz.open(pdf_path)
             text = ""
 
-            for page in doc:
-                text += page.get_text()
+            for page_num, page in enumerate(doc):
+                # Önce normal text extraction dene
+                page_text = page.get_text()
+
+                if page_text.strip():
+                    # Text-based PDF - direkt al
+                    text += page_text
+                else:
+                    # Scanned PDF - OCR yap
+                    try:
+                        from PIL import Image
+                        import pytesseract
+                        import io
+
+                        # Sayfayı görüntüye çevir (150 DPI yeterli)
+                        pix = page.get_pixmap(dpi=150)
+                        img = Image.open(io.BytesIO(pix.tobytes("png")))
+
+                        # Tesseract OCR (Türkçe)
+                        ocr_text = pytesseract.image_to_string(img, lang='tur')
+                        text += ocr_text
+
+                        debug(f"OCR yapıldı: sayfa {page_num + 1}, {len(ocr_text)} karakter")
+
+                    except ImportError as e:
+                        warn(f"OCR kütüphanesi eksik (pytesseract/PIL): {e}")
+                    except Exception as e:
+                        warn(f"OCR hatası sayfa {page_num + 1}: {e}")
 
             doc.close()
             return text

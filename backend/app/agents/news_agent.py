@@ -461,24 +461,32 @@ Cevap:"""
             return self._keyword_relevance(article, company_name)
 
     def _keyword_relevance(self, article: Dict, company_name: str) -> Tuple[bool, float]:
-        """Fallback: keyword-based relevance check."""
+        """
+        Basit kural: Firma adı veya önemli kelimeleri geçiyorsa PASS.
+
+        KKB İsteği: "Firma adı içinde geçsin yeter!"
+        """
         title = article.get('title', '').lower()
         text = (article.get('text', '') or '').lower()
+        combined = f"{title} {text}"
 
+        # Ana kural: Firma adının tamamı geçiyor mu?
+        if company_name.lower() in combined:
+            return (True, 1.0)
+
+        # Veya en az 1 önemli kelime geçiyor mu?
         company_keywords = [w.lower() for w in company_name.split() if len(w) > 2]
 
-        matches = sum(1 for kw in company_keywords if kw in title or kw in text)
-        total_keywords = len(company_keywords)
+        if not company_keywords:
+            return (False, 0.2)  # Keyword yok → EXCLUDE
 
-        if total_keywords == 0:
-            return (True, 0.5)  # Keyword yok, dahil et
+        # En az 1 keyword geçsin yeter
+        if any(kw in combined for kw in company_keywords):
+            matches = sum(1 for kw in company_keywords if kw in combined)
+            confidence = matches / len(company_keywords)
+            return (True, max(confidence, 0.5))  # Min 0.5 confidence
 
-        confidence = matches / total_keywords
-
-        if confidence >= 0.5:
-            return (True, confidence)
-        else:
-            return (False, confidence)
+        return (False, 0.0)
 
     async def _validate_all_articles(self, articles: List[Dict], company_name: str) -> List[Dict]:
         """

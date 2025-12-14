@@ -259,6 +259,37 @@ class BaseNewsScraper(ABC):
             warn(f"Screenshot capture hatası: {e}")
             return None
     
+    def _filter_by_company_name(self, results: List[Dict], company_name: str) -> List[Dict]:
+        """
+        Sonuçları firma adına göre filtrele.
+
+        Başlıkta veya snippet'te firma adının önemli kelimelerinin
+        en az birinin geçmesi gerekiyor.
+        """
+        if not results or not company_name:
+            return results
+
+        # Firma adından anlamlı keyword'ler çıkar (2+ karakter)
+        company_keywords = [w.lower() for w in company_name.split() if len(w) > 2]
+
+        if not company_keywords:
+            return results  # Keyword yoksa filtre uygulama
+
+        filtered = []
+        for result in results:
+            title = result.get('title', '').lower()
+            snippet = result.get('snippet', '').lower()
+            combined = f"{title} {snippet}"
+
+            # En az 1 keyword geçmeli
+            if any(kw in combined for kw in company_keywords):
+                filtered.append(result)
+            else:
+                debug(f"Filtrelendi (alakasız): {result.get('title', '')[:50]}...")
+
+        log(f"[{self.name}] Firma filtresi: {len(results)} → {len(filtered)} haber")
+        return filtered
+
     async def search_and_fetch(self, company_name: str, max_articles: int = 3, skip_details: bool = False) -> List[Dict]:
         """
         Haber ara ve detaylarını getir.
@@ -269,9 +300,12 @@ class BaseNewsScraper(ABC):
             skip_details: True ise LLM extraction atlanır (DEMO MODE için hızlı)
         """
         try:
-            results = await self.search(company_name, max_results=max_articles)
+            results = await self.search(company_name, max_results=max_articles * 2)  # Daha fazla ara, filtreleyeceğiz
             if not results:
                 return []
+
+            # FIRMA FILTRESI: Alakasız haberleri çıkar
+            results = self._filter_by_company_name(results, company_name)
 
             # DEMO MODE: LLM extraction atla, sadece search sonuçlarını döndür
             if skip_details:

@@ -818,7 +818,7 @@ class TSGScraper:
                     rows = await table.query_selector_all("tr")
                     debug(f"Tablo bulundu: {selector} ({len(rows)} satir)")
 
-                    for row in rows[1:16]:  # Header atla, max 15
+                    for row in rows[1:]:  # Header atla, TÜM SATIRLAR
                         try:
                             cells = await row.query_selector_all("td")
                             if len(cells) >= 4:

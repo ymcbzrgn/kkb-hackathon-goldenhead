@@ -355,12 +355,20 @@ class Orchestrator:
 
         # TSG completed event'i
         if tsg_result and tsg_result.status == "completed":
+            # Toplam ilan sayısını çıkar
+            toplam_ilan = 0
+            if tsg_result.data:
+                tsg_sonuc = tsg_result.data.get("tsg_sonuc", {})
+                toplam_ilan = tsg_sonuc.get("toplam_ilan", 0)
+
             await self._send_event("agent_completed", {
                 "agent_id": "tsg_agent",
                 "duration_seconds": tsg_result.duration_seconds,
-                "summary": {
-                    "key_findings": tsg_result.key_findings,
-                    "warning_flags": tsg_result.warning_flags
+                "summary": tsg_result.summary,  # Text summary
+                "key_findings": tsg_result.key_findings,
+                "warning_flags": tsg_result.warning_flags,
+                "data": {
+                    "toplam_ilan": toplam_ilan
                 }
             })
         else:
