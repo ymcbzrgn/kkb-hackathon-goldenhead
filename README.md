@@ -27,6 +27,7 @@
 - [Veritabanı](#-veritabanı)
 - [Ekip](#-ekip)
 - [Lisans](#-lisans)
+- [Hackathon Değerlendirme Kriterleri](#-hackathon-değerlendirme-kriterleri)
 
 ---
 
@@ -1242,6 +1243,21 @@ consensus = max(0, min(1, consensus))
 ## 📄 Lisans
 
 Bu proje **Apache License 2.0** altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakın.
+
+---
+
+## 🏆 Hackathon Değerlendirme Kriterleri
+
+Projemiz, hackathon kapsamında istenen tüm teknik ve mimari gereksinimleri karşılamaktadır:
+
+- [x] **Projenin modüler kod yapısı**
+  - *Bkz: [Proje Yapısı](#-proje-yapısı)* - Frontend, Backend, Agent servileri ve Worker'ların ayrıştırılmış yapısı.
+- [x] **Doküman okuma süreçlerinde kullandığınız yaklaşım veya agent yapısı**
+  - *Bkz: [TSG Agent](#1-tsg-agent-ticaret-sicili-gazetesi) ve [İhale Agent](#2-ihale-agent-resmi-gazete-yasaklama-kararları)* - OCR ve PDF işleme detayları.
+- [x] **Agentic mimarinin karar alma ve görev işleme tasarımı**
+  - *Bkz: [Kredi Komitesi](#%EF%B8%8F-kredi-komitesi-council)* - 6 farklı persona, ağırlıklı skorlama ve konsensüs mekanizması.
+- [x] **Projenin genel mimari tasarımı**
+  - *Bkz: [Sistem Mimarisi](#-sistem-mimarisi)* - Detaylı ASCII mimari diyagramları ve veri akış şemaları.
 
 ---
 
